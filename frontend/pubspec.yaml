@@ -1,0 +1,87 @@
+name: paynotify
+description: "Fuel Station Management SaaS for Kenya"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  flutter_web_plugins:             # ✅ NEW — needed for usePathUrlStrategy()
+    sdk: flutter
+
+  # ────────────────────────────────────────────────────────────────
+  # STATE MANAGEMENT & UTILITIES
+  # ────────────────────────────────────────────────────────────────
+  provider: ^6.1.2                # App state management
+  intl: ^0.19.0                   # Date formatting & localization
+  shared_preferences: ^2.2.2      # Persist sidebar state & user settings
+  google_fonts: ^6.1.0            # Professional typography
+
+  # ────────────────────────────────────────────────────────────────
+  # UI & ANIMATIONS
+  # ────────────────────────────────────────────────────────────────
+  cupertino_icons: ^1.0.8         # iOS-style icons
+  shimmer: ^3.0.0                 # Skeleton loading effects
+  flutter_svg: ^2.0.9             # Support for SVG logos/icons
+
+  # ────────────────────────────────────────────────────────────────
+  # API, NETWORKING & CONNECTIVITY (UPDATED)
+  # ────────────────────────────────────────────────────────────────
+  http: ^1.2.0                    # HTTP requests for backend API
+  flutter_dotenv: ^5.1.0          # Environment variables (.env)
+  connectivity_plus: ^6.0.3       # Check online/offline status
+  flutter_secure_storage: ^9.0.0  # 🔐 SECURE token storage (JWT tokens)
+
+  # ────────────────────────────────────────────────────────────────
+  # QR CODES & SCANNING
+  # ────────────────────────────────────────────────────────────────
+  qr_flutter: ^4.1.0              # Generate QR codes
+  mobile_scanner: ^5.2.2          # Scan QR codes (Camera)
+  permission_handler: ^11.0.1     # Handle camera/storage permissions
+
+  # ────────────────────────────────────────────────────────────────
+  # FILE EXPORT & SHARING (For CSV Reports)
+  # ────────────────────────────────────────────────────────────────
+  csv: ^6.0.0                     # Convert data to CSV format
+  path_provider: ^2.1.2           # Get device storage paths
+  share_plus: ^10.0.0             # Share exported files (WhatsApp, Email, etc.)
+  open_file: ^3.3.2               # Open exported files directly
+
+  # ────────────────────────────────────────────────────────────────
+  # ADDITIONAL UI COMPONENTS
+  # ────────────────────────────────────────────────────────────────
+  flutter_staggered_animations: ^1.1.0  # Smooth list animations
+  animations: ^2.0.11              # Additional animation widgets
+
+  # ────────────────────────────────────────────────────────────────
+  # BACKEND & AUTHENTICATION (UPDATED)
+  # ────────────────────────────────────────────────────────────────
+  jwt_decoder: ^2.0.1             # Decode JWT tokens to check expiry
+  equatable: ^2.0.5               # Value equality for models
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0           # Linting rules
+  build_runner: ^2.4.8            # Code generation (if needed)
+
+flutter:
+  uses-material-design: true
+
+  # Assets
+  assets:
+    - assets/images/
+    - assets/icons/
+    - .env
+
+  # Optional: Add custom fonts
+  # fonts:
+  #   - family: Poppins
+  #     fonts:
+  #       - asset: assets/fonts/Poppins-Regular.ttf
+  #       - asset: assets/fonts/Poppins-Bold.ttf
+  #         weight: 700

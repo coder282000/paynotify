@@ -1,0 +1,42 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Flutter Web - Chrome",
+            "type": "dart",
+            "request": "launch",
+            "program": "lib/main.dart",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "-d",
+                "chrome",
+                "--web-port=5000"
+            ],
+            "console": "terminal"
+        },
+        {
+            "name": "Flutter Mobile - Android",
+            "type": "dart",
+            "request": "launch",
+            "program": "lib/main.dart",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "-d",
+                "android"
+            ],
+            "console": "terminal"
+        },
+        {
+            "name": "Flutter Mobile - iOS",
+            "type": "dart",
+            "request": "launch",
+            "program": "lib/main.dart",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "-d",
+                "ios"
+            ],
+            "console": "terminal"
+        }
+    ]
+}
