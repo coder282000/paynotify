@@ -41,7 +41,7 @@ class SubscriptionPlanCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -110,7 +110,7 @@ class SubscriptionPlanCard extends StatelessWidget {
                     feature,
                     style: const TextStyle(fontSize: 11),
                   ),
-                  backgroundColor: color.withOpacity(0.1),
+                  backgroundColor: color.withValues(alpha: 0.1),
                 );
               }).toList(),
             ),

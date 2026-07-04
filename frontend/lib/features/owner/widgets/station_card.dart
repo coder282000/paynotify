@@ -36,7 +36,7 @@ class StationCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0B3D2E).withOpacity(0.1),
+                      color: const Color(0xFF0B3D2E).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(

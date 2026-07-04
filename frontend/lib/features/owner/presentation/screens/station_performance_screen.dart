@@ -131,7 +131,7 @@ class _StationPerformanceScreenState extends State<StationPerformanceScreen> {
                   });
                 }
               },
-              selectedColor: const Color(0xFF0B3D2E).withOpacity(0.1),
+              selectedColor: const Color(0xFF0B3D2E).withValues(alpha: 0.1),
               checkmarkColor: const Color(0xFF0B3D2E),
             ),
           ),

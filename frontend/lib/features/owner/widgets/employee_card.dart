@@ -37,7 +37,7 @@ class EmployeeCard extends StatelessWidget {
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  color: _getRoleColor(employee.roleColorValue).withOpacity(0.1),
+                  color: _getRoleColor(employee.roleColorValue).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(25),
                 ),
                 child: Center(
@@ -70,7 +70,7 @@ class EmployeeCard extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: _getRoleColor(employee.roleColorValue).withOpacity(0.1),
+                            color: _getRoleColor(employee.roleColorValue).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
@@ -87,10 +87,10 @@ class EmployeeCard extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
                             color: employee.isActive 
-                                ? Colors.green.withOpacity(0.1) 
+                                ? Colors.green.withValues(alpha: 0.1) 
                                 : (isPending 
-                                    ? Colors.orange.withOpacity(0.1) 
-                                    : Colors.red.withOpacity(0.1)),
+                                    ? Colors.orange.withValues(alpha: 0.1) 
+                                    : Colors.red.withValues(alpha: 0.1)),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(

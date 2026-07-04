@@ -24,7 +24,7 @@ class PerformanceChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final chartColor = lineColor ?? const Color(0xFF0B3D2E);
-    final areaColor = fillColor ?? chartColor.withOpacity(0.1);
+    final areaColor = fillColor ?? chartColor.withValues(alpha: 0.1);
 
     return Card(
       elevation: 2,

@@ -21,7 +21,7 @@ class RecentActivityTile extends StatelessWidget {
       ),
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: _getActivityColor(activity.activityColorName).withOpacity(0.1),
+          backgroundColor: _getActivityColor(activity.activityColorName).withValues(alpha: 0.1),
           child: Icon(
             _getActivityIcon(activity.activityIconName),
             color: _getActivityColor(activity.activityColorName),
@@ -47,7 +47,7 @@ class RecentActivityTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: _getPaymentColor(activity.paymentType!).withOpacity(0.1),
+                  color: _getPaymentColor(activity.paymentType!).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
