@@ -53,7 +53,7 @@ app.use(cors({
 
 app.set('trust proxy', 1);
 
-// ── SECURITY MIDDLEWARE (FULLY FIXED CSP) ──────────────────────────────
+// ── SECURITY MIDDLEWARE ──────────────────────────────────────────────
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
@@ -126,8 +126,11 @@ if (!fs.existsSync(downloadsPath)) {
 }
 app.use('/downloads', express.static(downloadsPath));
 
-// ✅ UPDATED: Changed from 'paynotify' to 'frontend'
-const FLUTTER_WEB_BUILD = path.join(__dirname, '..', 'frontend', 'build', 'web');
+// ✅ FIXED: Works correctly in both Railway (production) and local dev
+const FLUTTER_WEB_BUILD = process.env.NODE_ENV === 'production'
+    ? path.join(__dirname, 'flutter_web')              // Railway: copied by Dockerfile into /app/flutter_web
+    : 'C:\\paynotify\\pracko\\paynotify\\build\\web';  // Local dev: your machine path
+
 const hasFlutterWeb = fs.existsSync(FLUTTER_WEB_BUILD);
 
 if (hasFlutterWeb) {
