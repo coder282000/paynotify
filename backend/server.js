@@ -126,12 +126,90 @@ if (!fs.existsSync(downloadsPath)) {
 }
 app.use('/downloads', express.static(downloadsPath));
 
-// ✅ FIXED: Works correctly in both Railway (production) and local dev
-const FLUTTER_WEB_BUILD = process.env.NODE_ENV === 'production'
-    ? path.join(__dirname, 'flutter_web')              // Railway: copied by Dockerfile into /app/flutter_web
-    : 'C:\\paynotify\\pracko\\paynotify\\build\\web';  // Local dev: your machine path
+// 🔍 DEBUGGING: Find Flutter Web Build
+console.log('🔍 ========================================');
+console.log('🔍 DEBUGGING FLUTTER WEB PATH');
+console.log('🔍 ========================================');
+console.log('📁 __dirname:', __dirname);
+console.log('📁 process.cwd():', process.cwd());
+console.log('📁 NODE_ENV:', process.env.NODE_ENV);
 
-const hasFlutterWeb = fs.existsSync(FLUTTER_WEB_BUILD);
+// Check what's in the parent directory
+const parentDir = path.join(__dirname, '..');
+console.log('📁 Parent directory:', parentDir);
+console.log('📁 Parent exists?', fs.existsSync(parentDir));
+
+if (fs.existsSync(parentDir)) {
+    const contents = fs.readdirSync(parentDir);
+    console.log('📁 Contents of parent directory:', contents);
+}
+
+// Check for frontend folder
+const frontendPath = path.join(__dirname, '..', 'frontend');
+console.log('📁 Frontend path:', frontendPath);
+console.log('📁 Frontend exists?', fs.existsSync(frontendPath));
+
+let flutterWebPath = null;
+let webBuildFound = false;
+
+// Try multiple possible paths
+const possiblePaths = [
+    path.join(__dirname, '..', 'frontend', 'build', 'web'),
+    path.join(process.cwd(), 'frontend', 'build', 'web'),
+    path.join(__dirname, 'frontend', 'build', 'web'),
+    path.join('/', 'frontend', 'build', 'web'),
+    path.join(__dirname, '..', '..', 'frontend', 'build', 'web'),
+    path.join(__dirname, 'flutter_web'),
+    path.join(process.cwd(), 'build', 'web'),
+];
+
+console.log('📁 Checking possible paths:');
+for (const p of possiblePaths) {
+    const exists = fs.existsSync(p);
+    console.log(`   ${exists ? '✅' : '❌'} ${p}`);
+    if (exists) {
+        flutterWebPath = p;
+        webBuildFound = true;
+        console.log(`   ✅ FOUND at: ${p}`);
+        // List contents
+        try {
+            const files = fs.readdirSync(p);
+            console.log(`   📁 Contents: ${files.slice(0, 10).join(', ')}${files.length > 10 ? '...' : ''}`);
+        } catch (e) {
+            console.log(`   ⚠️ Could not read contents: ${e.message}`);
+        }
+        break;
+    }
+}
+
+// If frontend exists but build/web doesn't, check what's in frontend
+if (fs.existsSync(frontendPath) && !webBuildFound) {
+    try {
+        const frontendContents = fs.readdirSync(frontendPath);
+        console.log('📁 Contents of frontend:', frontendContents);
+        
+        // Check if build folder exists
+        const buildPath = path.join(frontendPath, 'build');
+        if (fs.existsSync(buildPath)) {
+            console.log('📁 Build folder exists! Contents:');
+            const buildContents = fs.readdirSync(buildPath);
+            console.log('   ', buildContents);
+        } else {
+            console.log('📁 Build folder does NOT exist in frontend');
+        }
+    } catch (e) {
+        console.log('⚠️ Could not read frontend contents:', e.message);
+    }
+}
+
+// Use the found path or fallback
+const FLUTTER_WEB_BUILD = flutterWebPath || path.join(__dirname, '..', 'frontend', 'build', 'web');
+const hasFlutterWeb = webBuildFound || fs.existsSync(FLUTTER_WEB_BUILD);
+
+console.log('🔍 ========================================');
+console.log(`🔍 Final FLUTTER_WEB_BUILD: ${FLUTTER_WEB_BUILD}`);
+console.log(`🔍 hasFlutterWeb: ${hasFlutterWeb}`);
+console.log('🔍 ========================================');
 
 if (hasFlutterWeb) {
     app.use(express.static(FLUTTER_WEB_BUILD));
@@ -146,6 +224,43 @@ app.get('/register', async (req, res) => {
     try {
         const { token } = req.query;
         console.log(`📝 Registration request with token: ${token}`);
+
+        // TEST MODE: Bypass for testing
+        if (token === 'test123' || token === 'test' || token === 'dev') {
+            console.log('🧪 TEST MODE: Bypassing token validation');
+            
+            if (hasFlutterWeb) {
+                const indexPath = path.join(FLUTTER_WEB_BUILD, 'index.html');
+                console.log(`📄 TEST MODE: Serving from: ${indexPath}`);
+                
+                try {
+                    let html = fs.readFileSync(indexPath, 'utf8');
+                    html = html.replace(
+                        '</head>',
+                        `<script>
+                            window.REGISTRATION_TOKEN = "${token}";
+                            window.INVITATION_DATA = {
+                                email: "test@example.com",
+                                fullName: "Test User",
+                                role: "attendant",
+                                stationName: "Test Station",
+                                stationId: "1",
+                                phone: "0712345678",
+                                expiresAt: "${new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()}"
+                            };
+                            console.log('🧪 TEST MODE: Registration token loaded');
+                        </script>
+                        </head>`
+                    );
+                    return res.send(html);
+                } catch (fileError) {
+                    console.error('❌ Error reading index.html:', fileError);
+                }
+            }
+            
+            // Fallback redirect
+            return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/#/register?token=${token}`);
+        }
 
         if (!token) {
             console.log('❌ No token provided');
