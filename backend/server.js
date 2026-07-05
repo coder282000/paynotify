@@ -32,6 +32,7 @@ const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:3001',
     'https://unlatch-joystick-grievance.ngrok-free.dev',
+    'https://paynotify-production.up.railway.app',
     process.env.FRONTEND_URL,
 ].filter(Boolean);
 
@@ -64,6 +65,7 @@ app.use(helmet({
                 "'wasm-unsafe-eval'",
                 "https://www.gstatic.com",
                 "https://unlatch-joystick-grievance.ngrok-free.dev",
+                "https://paynotify-production.up.railway.app",
                 "https://fonts.googleapis.com",
             ],
             styleSrc: [
@@ -71,6 +73,7 @@ app.use(helmet({
                 "'unsafe-inline'",
                 "https://fonts.googleapis.com",
                 "https://unlatch-joystick-grievance.ngrok-free.dev",
+                "https://paynotify-production.up.railway.app",
             ],
             imgSrc: ["'self'", "data:", "https:", "blob:"],
             fontSrc: [
@@ -82,6 +85,7 @@ app.use(helmet({
             connectSrc: [
                 "'self'",
                 "https://unlatch-joystick-grievance.ngrok-free.dev",
+                "https://paynotify-production.up.railway.app",
                 "https://www.gstatic.com",
                 "https://fonts.gstatic.com",
                 "https://fonts.googleapis.com",
@@ -122,7 +126,8 @@ if (!fs.existsSync(downloadsPath)) {
 }
 app.use('/downloads', express.static(downloadsPath));
 
-const FLUTTER_WEB_BUILD = path.join(__dirname, '..', 'paynotify', 'build', 'web');
+// ✅ UPDATED: Changed from 'paynotify' to 'frontend'
+const FLUTTER_WEB_BUILD = path.join(__dirname, '..', 'frontend', 'build', 'web');
 const hasFlutterWeb = fs.existsSync(FLUTTER_WEB_BUILD);
 
 if (hasFlutterWeb) {
