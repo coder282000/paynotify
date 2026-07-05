@@ -1,4 +1,4 @@
-FROM node:18-alpine
+﻿FROM node:18-alpine
 
 WORKDIR /app
 
@@ -10,6 +10,9 @@ RUN npm ci --only=production
 
 # Copy backend source code
 COPY backend/ ./
+
+# Copy Flutter web build
+COPY frontend/build/web/ /app/flutter_web/
 
 # Expose port
 EXPOSE 3000
