@@ -126,9 +126,11 @@ if (!fs.existsSync(downloadsPath)) {
 }
 app.use('/downloads', express.static(downloadsPath));
 
-// ✅ FIXED: Correct path for Railway - frontend is inside /app
-// __dirname = /app, so __dirname/frontend = /app/frontend
-const FLUTTER_WEB_BUILD = path.join(__dirname, 'frontend', 'build', 'web');
+// ✅ FIXED: Use flutter_web in production (matches Dockerfile)
+const FLUTTER_WEB_BUILD = process.env.NODE_ENV === 'production'
+    ? path.join(__dirname, 'flutter_web')              // Railway: /app/flutter_web
+    : path.join(__dirname, '..', 'frontend', 'build', 'web'); // Local dev
+
 const hasFlutterWeb = fs.existsSync(FLUTTER_WEB_BUILD);
 
 if (hasFlutterWeb) {
