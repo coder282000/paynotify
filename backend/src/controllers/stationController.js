@@ -11,6 +11,7 @@ const getStations = async (req, res) => {
         const userId = req.user.userId;
         const userRole = req.user.role;
 
+        // First, get the basic station data
         let query = `
             SELECT 
                 s.id,
@@ -29,14 +30,9 @@ const getStations = async (req, res) => {
                 s.status,
                 s.created_at,
                 s.updated_at,
-                u.full_name as manager_name,
-                COUNT(DISTINCT p.id) as total_pumps,
-                COUNT(DISTINCT CASE WHEN p.status = 'active' THEN p.id END) as active_pumps,
-                COALESCE(SUM(t.amount), 0) as total_sales
+                u.full_name as manager_name
             FROM stations s
             LEFT JOIN users u ON s.manager_id = u.id
-            LEFT JOIN pumps p ON s.id = p.station_id
-            LEFT JOIN transactions t ON s.id = t.station_id AND DATE(t.created_at) = CURRENT_DATE
             WHERE 1=1
         `;
 
@@ -45,34 +41,73 @@ const getStations = async (req, res) => {
 
         // Role-based filtering
         if (userRole === 'owner') {
-            // Owner sees all their stations
             query += ` AND s.owner_id = $${paramCount}`;
             params.push(userId);
             paramCount++;
         } else if (userRole === 'manager') {
-            // Manager sees only their assigned station
             query += ` AND s.manager_id = $${paramCount}`;
             params.push(userId);
             paramCount++;
         } else {
-            // Other roles cannot access stations endpoint
             return res.status(403).json({
                 success: false,
                 message: 'Access denied. Only owners and managers can view stations.'
             });
         }
 
-        query += ` GROUP BY s.id, u.full_name ORDER BY s.created_at DESC`;
+        query += ` ORDER BY s.created_at DESC`;
 
         const result = await pool.query(query, params);
 
+        // If no stations, return early
         if (result.rows.length === 0) {
             return res.json({
                 success: true,
                 data: [],
-                message: 'No stations found'
+                count: 0
             });
         }
+
+        // Get pump counts and sales separately for each station
+        const stationIds = result.rows.map(s => s.id);
+        const placeholders = stationIds.map((_, i) => `$${i + 1}`).join(',');
+
+        // Get pump counts
+        const pumpCounts = await pool.query(`
+            SELECT 
+                station_id,
+                COUNT(*) as total_pumps,
+                COUNT(CASE WHEN status = 'active' THEN 1 END) as active_pumps
+            FROM pumps
+            WHERE station_id IN (${placeholders})
+            GROUP BY station_id
+        `, stationIds);
+
+        // Get today's sales
+        const salesData = await pool.query(`
+            SELECT 
+                station_id,
+                COALESCE(SUM(amount), 0) as total_sales
+            FROM transactions
+            WHERE station_id IN (${placeholders}) 
+                AND DATE(created_at) = CURRENT_DATE 
+                AND status = 'completed'
+            GROUP BY station_id
+        `, stationIds);
+
+        // Combine the data
+        const pumpMap = {};
+        pumpCounts.rows.forEach(row => {
+            pumpMap[row.station_id] = {
+                totalPumps: parseInt(row.total_pumps),
+                activePumps: parseInt(row.active_pumps)
+            };
+        });
+
+        const salesMap = {};
+        salesData.rows.forEach(row => {
+            salesMap[row.station_id] = parseFloat(row.total_sales);
+        });
 
         const stations = result.rows.map(station => ({
             id: station.id,
@@ -90,9 +125,9 @@ const getStations = async (req, res) => {
             tillNumber: station.till_number,
             isActive: station.is_active,
             status: station.status,
-            totalPumps: parseInt(station.total_pumps),
-            activePumps: parseInt(station.active_pumps),
-            todaySales: parseFloat(station.total_sales),
+            totalPumps: pumpMap[station.id]?.totalPumps || 0,
+            activePumps: pumpMap[station.id]?.activePumps || 0,
+            todaySales: salesMap[station.id] || 0,
             createdAt: station.created_at,
             updatedAt: station.updated_at
         }));
@@ -129,7 +164,6 @@ const getStationById = async (req, res) => {
             });
         }
 
-        // Get station details
         const stationResult = await pool.query(
             `SELECT 
                 s.id,
@@ -169,7 +203,6 @@ const getStationById = async (req, res) => {
 
         const station = stationResult.rows[0];
 
-        // Check authorization
         if (userRole === 'owner' && station.owner_id !== userId) {
             return res.status(403).json({
                 success: false,
@@ -184,14 +217,12 @@ const getStationById = async (req, res) => {
             });
         }
 
-        // Get pumps
         const pumpsResult = await pool.query(
             `SELECT id, pump_number, fuel_type, status, price_per_liter, current_fuel_level
              FROM pumps WHERE station_id = $1 ORDER BY pump_number`,
             [id]
         );
 
-        // Get today's summary
         const summaryResult = await pool.query(
             `SELECT 
                 COALESCE(SUM(amount), 0) as total_sales,
@@ -206,7 +237,6 @@ const getStationById = async (req, res) => {
 
         const summary = summaryResult.rows[0];
 
-        // Get staff count
         const staffResult = await pool.query(
             `SELECT COUNT(*) as total_staff, 
                     SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_staff
@@ -280,7 +310,18 @@ const getStationById = async (req, res) => {
  * Create new station (Owner only)
  */
 const createStation = async (req, res) => {
-    const { station_name, station_code, location, city, county, phone, email, manager_id, paybill_number, till_number } = req.body;
+    const { 
+        station_name, 
+        station_code, 
+        location, 
+        city, 
+        county, 
+        phone, 
+        email, 
+        manager_id = null,
+        paybill_number = null,
+        till_number = null
+    } = req.body;
     const ownerId = req.user.userId;
 
     try {
@@ -325,17 +366,28 @@ const createStation = async (req, res) => {
             `INSERT INTO stations (owner_id, station_name, station_code, location, city, county, phone, email, manager_id, paybill_number, till_number, is_active)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
              RETURNING id, station_name, station_code, location, city, is_active, created_at`,
-            [ownerId, station_name, station_code, location, city || null, county || null, phone || null, email || null, manager_id || null, paybill_number || null, till_number || null]
+            [ownerId, station_name, station_code, location, city || null, county || null, phone || null, email || null, manager_id, paybill_number, till_number]
         );
 
         const station = result.rows[0];
 
-        // Create default station settings
-        await pool.query(
-            `INSERT INTO station_settings (station_id, currency, language, timezone)
-             VALUES ($1, 'KES', 'en', 'Africa/Nairobi')`,
-            [station.id]
-        );
+        // ✅ FIXED: Create default station settings using key-value pairs
+        const defaultSettings = [
+            { key: 'currency', value: 'KES' },
+            { key: 'language', value: 'en' },
+            { key: 'timezone', value: 'Africa/Nairobi' },
+            { key: 'opening_time', value: '08:00' },
+            { key: 'closing_time', value: '20:00' },
+            { key: 'is_24_hours', value: 'false' }
+        ];
+
+        for (const setting of defaultSettings) {
+            await pool.query(
+                `INSERT INTO station_settings (station_id, setting_key, setting_value)
+                 VALUES ($1, $2, $3)`,
+                [station.id, setting.key, setting.value]
+            );
+        }
 
         // Log the creation
         await pool.query(
@@ -378,7 +430,6 @@ const updateStation = async (req, res) => {
     const userRole = req.user.role;
 
     try {
-        // Check if station exists and user has access
         const stationCheck = await pool.query(
             'SELECT owner_id, manager_id FROM stations WHERE id = $1',
             [id]
@@ -393,7 +444,6 @@ const updateStation = async (req, res) => {
 
         const station = stationCheck.rows[0];
 
-        // Authorization check
         if (userRole === 'owner' && station.owner_id !== userId) {
             return res.status(403).json({
                 success: false,
@@ -408,7 +458,6 @@ const updateStation = async (req, res) => {
             });
         }
 
-        // Build update query dynamically
         const updates = [];
         const values = [];
         let paramCount = 1;
@@ -485,7 +534,6 @@ const updateStation = async (req, res) => {
 
         const result = await pool.query(query, values);
 
-        // Log the update
         await pool.query(
             `INSERT INTO audit_logs (user_id, event_type, details)
              VALUES ($1, 'STATION_UPDATED', $2)`,
@@ -539,7 +587,6 @@ const getStationSummary = async (req, res) => {
             });
         }
 
-        // Check authorization
         const stationCheck = await pool.query(
             'SELECT owner_id, manager_id FROM stations WHERE id = $1',
             [id]
@@ -562,7 +609,6 @@ const getStationSummary = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Access denied' });
         }
 
-        // Build query - using COALESCE to safely handle null liters_dispensed
         let query = `
             SELECT 
                 COUNT(*) as total_transactions,
@@ -580,18 +626,15 @@ const getStationSummary = async (req, res) => {
         const params = [id];
         let paramIndex = 2;
 
-        // Add date filter if provided
         if (start_date && end_date) {
             query += ` AND DATE(created_at) >= $${paramIndex} AND DATE(created_at) <= $${paramIndex + 1}`;
             params.push(start_date, end_date);
         } else {
-            // Default to today
             query += ` AND DATE(created_at) = CURRENT_DATE`;
         }
 
         const result = await pool.query(query, params);
 
-        // Handle empty result
         if (!result.rows || result.rows.length === 0) {
             return res.json({
                 success: true,
@@ -644,7 +687,6 @@ const getStationPerformance = async (req, res) => {
     const userRole = req.user.role;
 
     try {
-        // Check authorization
         const stationCheck = await pool.query(
             'SELECT owner_id FROM stations WHERE id = $1',
             [id]
@@ -661,7 +703,6 @@ const getStationPerformance = async (req, res) => {
             return res.status(403).json({ success: false, message: 'Access denied' });
         }
 
-        // Get or create performance record
         const perfResult = await pool.query(
             `SELECT * FROM station_performance WHERE station_id = $1`,
             [id]
@@ -669,7 +710,6 @@ const getStationPerformance = async (req, res) => {
 
         let performance;
         if (perfResult.rows.length === 0) {
-            // Create default performance record
             await pool.query(
                 `INSERT INTO station_performance (station_id) VALUES ($1)`,
                 [id]
