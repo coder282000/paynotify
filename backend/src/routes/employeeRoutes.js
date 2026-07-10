@@ -14,6 +14,7 @@ const {
     validateInvite,
     registerEmployee,
     getPendingRegistrations,
+    getAllPending,      // ✅ ADDED: New function
     approveEmployee
 } = require('../controllers/employeeController');
 
@@ -131,11 +132,24 @@ router.get(
 /**
  * GET /api/employees/pending
  * Get pending employee registrations for approval
+ * ⚠️ LEGACY: Only shows users who have registered but not yet approved
+ * Use /api/employees/all-pending for full list including invitations
  */
 router.get(
     '/pending',
     authorize('owner', 'manager'),
     getPendingRegistrations
+);
+
+/**
+ * GET /api/employees/all-pending
+ * Get ALL pending items: invitations + registrations
+ * ✅ Shows invitations immediately when sent
+ */
+router.get(
+    '/all-pending',
+    authorize('owner', 'manager'),
+    getAllPending
 );
 
 /**
