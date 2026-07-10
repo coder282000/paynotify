@@ -2,7 +2,20 @@
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
 const { authenticate, authorize } = require('../middleware/auth');
-const employeeController = require('../controllers/employeeController');
+const {
+    getEmployees,
+    getEmployeeById,
+    createEmployee,
+    updateEmployee,
+    deleteEmployee,
+    getEmployeeStats,
+    inviteEmployee,
+    resendInvitation,
+    validateInvite,
+    registerEmployee,
+    getPendingRegistrations,
+    approveEmployee
+} = require('../controllers/employeeController');
 
 const router = express.Router();
 
@@ -95,7 +108,7 @@ router.use(authenticate);
 router.get(
     '/',
     authorize('owner', 'manager'),
-    employeeController.getEmployees
+    getEmployees
 );
 
 /**
@@ -105,7 +118,7 @@ router.get(
 router.get(
     '/stats',
     authorize('owner', 'manager'),
-    employeeController.getEmployeeStats
+    getEmployeeStats
 );
 
 /**
@@ -115,18 +128,7 @@ router.get(
 router.get(
     '/pending',
     authorize('owner', 'manager'),
-    employeeController.getPendingRegistrations
-);
-
-/**
- * GET /api/employees/all-pending
- * Get ALL pending items: invitations + registrations
- * ✅ Shows invitations immediately when sent
- */
-router.get(
-    '/all-pending',
-    authorize('owner', 'manager'),
-    employeeController.getAllPending
+    getPendingRegistrations
 );
 
 /**
@@ -138,7 +140,7 @@ router.post(
     authorize('owner', 'manager'),
     inviteValidation,
     handleValidation,
-    employeeController.inviteEmployee
+    inviteEmployee
 );
 
 /**
@@ -150,7 +152,7 @@ router.post(
     authorize('owner', 'manager'),
     resendValidation,
     handleValidation,
-    employeeController.resendInvitation
+    resendInvitation
 );
 
 /**
@@ -160,7 +162,7 @@ router.post(
 router.put(
     '/approve/:id',
     authorize('owner', 'manager'),
-    employeeController.approveEmployee
+    approveEmployee
 );
 
 /**
@@ -170,7 +172,7 @@ router.put(
 router.get(
     '/:id',
     authorize('owner', 'manager'),
-    employeeController.getEmployeeById
+    getEmployeeById
 );
 
 /**
@@ -180,7 +182,7 @@ router.get(
 router.post(
     '/',
     authorize('owner', 'manager'),
-    employeeController.createEmployee
+    createEmployee
 );
 
 /**
@@ -190,7 +192,7 @@ router.post(
 router.put(
     '/:id',
     authorize('owner', 'manager'),
-    employeeController.updateEmployee
+    updateEmployee
 );
 
 /**
@@ -200,7 +202,7 @@ router.put(
 router.delete(
     '/:id',
     authorize('owner', 'manager'),
-    employeeController.deleteEmployee
+    deleteEmployee
 );
 
 module.exports = router;
