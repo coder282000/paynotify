@@ -95,10 +95,25 @@ const sendInvitationEmail = async (email, fullName, role, stationName, invitedBy
                 ✅ Your invitation was sent by <strong>${invitedBy}</strong>
             </p>
 
-            <!-- DOWNLOAD SECTION - Step 1 -->
+            <!-- REGISTRATION SECTION - Step 1 (NOW FIRST) -->
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border: 2px solid #0B3D2E;">
+                <h3 style="margin-top: 0; color: #0B3D2E;">🔐 Step 1: Complete Your Registration</h3>
+                <p>Click the button below to register your account:</p>
+                <div style="text-align: center;">
+                    <a href="${registrationLink}" class="button">✅ Complete Your Registration</a>
+                </div>
+                <p style="font-size: 12px; color: #888; margin-top: 5px; text-align: center;">
+                    ⏰ This link expires in <strong>48 hours</strong>
+                </p>
+                <p style="font-size: 12px; color: #666; text-align: center; margin-top: 8px;">
+                    💡 You can complete registration on any device — mobile, tablet, or computer.
+                </p>
+            </div>
+
+            <!-- DOWNLOAD SECTION - Step 2 (NOW SECOND) -->
             <div class="download-section">
-                <h3 style="margin-top: 0; color: #2e7d32;">📱 Step 1: Download the App</h3>
-                <p>Click the button below to download PayNotify:</p>
+                <h3 style="margin-top: 0; color: #2e7d32;">📱 Step 2: Download the App</h3>
+                <p>After registering, download the app to start working:</p>
                 <a href="${directApkLink}"
                    class="btn-download"
                    target="_blank"
@@ -126,25 +141,13 @@ const sendInvitationEmail = async (email, fullName, role, stationName, invitedBy
                 </div>
             </div>
 
-            <!-- REGISTRATION SECTION - Step 2 -->
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                <h3 style="margin-top: 0;">🔐 Step 2: Complete Registration</h3>
-                <p>After installing the app, click the button below to register your account:</p>
-                <div style="text-align: center;">
-                    <a href="${registrationLink}" class="button">✅ Complete Your Registration</a>
-                </div>
-                <p style="font-size: 12px; color: #888; margin-top: 5px; text-align: center;">
-                    ⏰ This link expires in <strong>48 hours</strong>
-                </p>
-            </div>
-
             <div class="divider"></div>
 
             <div style="margin: 20px 0;">
                 <h3>📋 What happens next?</h3>
                 <div class="features-grid">
-                    <div class="feature-item">📥 Download the app</div>
                     <div class="feature-item">📝 Register your account</div>
+                    <div class="feature-item">📥 Download the app</div>
                     <div class="feature-item">⏳ ${role === 'manager' ? 'Owner' : 'Manager'} approves your account</div>
                     <div class="feature-item">🚀 Start working!</div>
                 </div>
@@ -214,7 +217,13 @@ Hello ${fullName}! 👋
 
 You have been invited to join PayNotify as a ${role} at ${stationName}.
 
-📱 Step 1: Download the App
+🔐 Step 1: Complete Your Registration
+${registrationLink}
+
+⏰ This link expires in 48 hours
+💡 You can complete registration on any device — mobile, tablet, or computer.
+
+📱 Step 2: Download the App (After Registration)
 Direct APK Download: ${directApkLink}
 
 Install steps:
@@ -226,14 +235,9 @@ Install steps:
 
 📌 Samsung users: Use Samsung Internet browser (not Chrome) for best results.
 
-🔐 Step 2: Complete Your Registration
-${registrationLink}
-
-⏰ This link expires in 48 hours
-
 📋 What happens next?
-1. Download the app
-2. Register your account
+1. Register your account
+2. Download the app
 3. ${role === 'manager' ? 'Owner' : 'Manager'} approves your account
 4. Start working!
 
@@ -254,7 +258,7 @@ PayNotify - Petrol Station Management
     try {
         console.log(`📧 Sending invitation email to ${email}...`);
         const { data, error } = await resend.emails.send({
-            from: `PayNotify <${getFromAddress()}>`,  // ✅ UPDATED: uses verified domain
+            from: `PayNotify <${getFromAddress()}>`,
             to: [email],
             subject: `You're invited to join PayNotify as a ${role}! 🚀`,
             html: htmlContent,
@@ -467,7 +471,7 @@ PayNotify - Petrol Station Management
     try {
         console.log(`📧 Sending approval email to ${email}...`);
         const { data, error } = await resend.emails.send({
-            from: `PayNotify <${getFromAddress()}>`,  // ✅ UPDATED: uses verified domain
+            from: `PayNotify <${getFromAddress()}>`,
             to: [email],
             subject: `🎉 Welcome to PayNotify, ${fullName}! Your account is approved.`,
             html: htmlContent,
