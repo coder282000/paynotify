@@ -2,21 +2,7 @@
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
 const { authenticate, authorize } = require('../middleware/auth');
-const {
-    getEmployees,
-    getEmployeeById,
-    createEmployee,
-    updateEmployee,
-    deleteEmployee,
-    getEmployeeStats,
-    inviteEmployee,
-    resendInvitation,
-    validateInvite,
-    registerEmployee,
-    getPendingRegistrations,
-    getAllPending,      // ✅ ADDED: New function
-    approveEmployee
-} = require('../controllers/employeeController');
+const employeeController = require('../controllers/employeeController');
 
 const router = express.Router();
 
@@ -50,15 +36,11 @@ const inviteValidation = [
         .notEmpty().withMessage('Role is required')
         .isIn(['attendant', 'supervisor', 'manager']).withMessage('Invalid role'),
 
-    // ✅ FIXED: checkFalsy treats "" (empty string sent by frontend when phone is blank)
-    // the same as undefined — so the validator is skipped instead of failing on isMobilePhone('')
     body('phone')
         .optional({ checkFalsy: true })
         .trim()
         .isMobilePhone().withMessage('Invalid phone number'),
 
-    // station_id is mandatory when the inviter is an owner,
-    // remains optional for managers (who are typically scoped to one station)
     body('station_id')
         .custom((value, { req }) => {
             if (req.user.role === 'owner' && !value) {
@@ -70,13 +52,10 @@ const inviteValidation = [
             return true;
         }),
 
-    // ✅ FIXED: nullable:true so explicit null (not just undefined) is treated as "not provided"
     body('assigned_pump_id')
         .optional({ nullable: true })
         .isInt({ min: 1 }).withMessage('Pump ID must be a valid integer'),
 
-    // ✅ FIXED: only validated/enforced when role === 'attendant' — ignored entirely for manager/supervisor invites,
-    // since employee_role is a sub-classification that only makes sense for attendants
     body('employee_role')
         .custom((value, { req }) => {
             if (req.body.role !== 'attendant') {
@@ -116,7 +95,7 @@ router.use(authenticate);
 router.get(
     '/',
     authorize('owner', 'manager'),
-    getEmployees
+    employeeController.getEmployees
 );
 
 /**
@@ -126,19 +105,17 @@ router.get(
 router.get(
     '/stats',
     authorize('owner', 'manager'),
-    getEmployeeStats
+    employeeController.getEmployeeStats
 );
 
 /**
  * GET /api/employees/pending
  * Get pending employee registrations for approval
- * ⚠️ LEGACY: Only shows users who have registered but not yet approved
- * Use /api/employees/all-pending for full list including invitations
  */
 router.get(
     '/pending',
     authorize('owner', 'manager'),
-    getPendingRegistrations
+    employeeController.getPendingRegistrations
 );
 
 /**
@@ -149,7 +126,7 @@ router.get(
 router.get(
     '/all-pending',
     authorize('owner', 'manager'),
-    getAllPending
+    employeeController.getAllPending
 );
 
 /**
@@ -161,7 +138,7 @@ router.post(
     authorize('owner', 'manager'),
     inviteValidation,
     handleValidation,
-    inviteEmployee
+    employeeController.inviteEmployee
 );
 
 /**
@@ -173,7 +150,7 @@ router.post(
     authorize('owner', 'manager'),
     resendValidation,
     handleValidation,
-    resendInvitation
+    employeeController.resendInvitation
 );
 
 /**
@@ -183,7 +160,7 @@ router.post(
 router.put(
     '/approve/:id',
     authorize('owner', 'manager'),
-    approveEmployee
+    employeeController.approveEmployee
 );
 
 /**
@@ -193,7 +170,7 @@ router.put(
 router.get(
     '/:id',
     authorize('owner', 'manager'),
-    getEmployeeById
+    employeeController.getEmployeeById
 );
 
 /**
@@ -203,7 +180,7 @@ router.get(
 router.post(
     '/',
     authorize('owner', 'manager'),
-    createEmployee
+    employeeController.createEmployee
 );
 
 /**
@@ -213,7 +190,7 @@ router.post(
 router.put(
     '/:id',
     authorize('owner', 'manager'),
-    updateEmployee
+    employeeController.updateEmployee
 );
 
 /**
@@ -223,7 +200,7 @@ router.put(
 router.delete(
     '/:id',
     authorize('owner', 'manager'),
-    deleteEmployee
+    employeeController.deleteEmployee
 );
 
 module.exports = router;
