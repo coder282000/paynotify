@@ -33,6 +33,7 @@ const allowedOrigins = [
     'http://localhost:3001',
     'https://unlatch-joystick-grievance.ngrok-free.dev',
     'https://paynotify-production.up.railway.app',
+    'https://paynotfy.dpdns.org',  // ✅ ADDED: Your new domain
     process.env.FRONTEND_URL,
 ].filter(Boolean);
 
@@ -66,6 +67,7 @@ app.use(helmet({
                 "https://www.gstatic.com",
                 "https://unlatch-joystick-grievance.ngrok-free.dev",
                 "https://paynotify-production.up.railway.app",
+                "https://paynotfy.dpdns.org",  // ✅ ADDED
                 "https://fonts.googleapis.com",
             ],
             styleSrc: [
@@ -74,6 +76,7 @@ app.use(helmet({
                 "https://fonts.googleapis.com",
                 "https://unlatch-joystick-grievance.ngrok-free.dev",
                 "https://paynotify-production.up.railway.app",
+                "https://paynotfy.dpdns.org",  // ✅ ADDED
             ],
             imgSrc: ["'self'", "data:", "https:", "blob:"],
             fontSrc: [
@@ -86,6 +89,7 @@ app.use(helmet({
                 "'self'",
                 "https://unlatch-joystick-grievance.ngrok-free.dev",
                 "https://paynotify-production.up.railway.app",
+                "https://paynotfy.dpdns.org",  // ✅ ADDED
                 "https://www.gstatic.com",
                 "https://fonts.gstatic.com",
                 "https://fonts.googleapis.com",
