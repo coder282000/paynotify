@@ -14,6 +14,11 @@ const getApkUrl = () => {
     return process.env.APK_DOWNLOAD_URL || 'https://github.com/coder282000/paynotify-releases/releases/download/v1.0.0/paynotify.apk';
 };
 
+// ✅ UPDATED: Use verified domain instead of onboarding@resend.dev
+const getFromAddress = () => {
+    return process.env.SMTP_FROM || 'noreply@paynotfy.dpdns.org';
+};
+
 // Log transporter status
 console.log('✅ Email transporter ready (Resend API)');
 
@@ -26,9 +31,9 @@ const sendInvitationEmail = async (email, fullName, role, stationName, invitedBy
     const downloadPageLink = directApkLink;
     const playStoreLink = process.env.PLAY_STORE_LINK || 'https://play.google.com/store/apps/details?id=com.paynotify.app';
     const appStoreLink = process.env.APP_STORE_LINK || 'https://apps.apple.com/app/paynotify/id123456789';
-    const desktopLink = process.env.DESKTOP_DOWNLOAD_LINK || 'https://paynotify.co.ke/download/desktop';
-    const privacyPolicy = process.env.PRIVACY_POLICY_URL || 'https://paynotify.co.ke/privacy';
-    const termsOfService = process.env.TERMS_OF_SERVICE_URL || 'https://paynotify.co.ke/terms';
+    const desktopLink = process.env.DESKTOP_DOWNLOAD_LINK || 'https://paynotfy.dpdns.org/download/desktop';
+    const privacyPolicy = process.env.PRIVACY_POLICY_URL || 'https://paynotfy.dpdns.org/privacy';
+    const termsOfService = process.env.TERMS_OF_SERVICE_URL || 'https://paynotfy.dpdns.org/terms';
     const year = new Date().getFullYear();
 
     const htmlContent = `
@@ -103,7 +108,6 @@ const sendInvitationEmail = async (email, fullName, role, stationName, invitedBy
                 <p style="font-size: 12px; color: #666; margin-top: 5px;">
                     ⚠️ <strong>Android Only:</strong> Enable "Install from Unknown Sources" in Settings → Security
                 </p>
-
                 <div class="tip">
                     <strong>💡 Install steps after download:</strong>
                     <ul>
@@ -114,11 +118,9 @@ const sendInvitationEmail = async (email, fullName, role, stationName, invitedBy
                         <li>Tap <strong>Allow</strong> on any permission requests — these are required for the app to work</li>
                     </ul>
                 </div>
-
                 <div class="samsung-tip">
                     📱 <strong>Samsung users:</strong> Use <strong>Samsung Internet</strong> browser (not Chrome) for the most reliable download experience on Samsung devices.
                 </div>
-
                 <div class="direct-link">
                     Direct link: <a href="${directApkLink}" target="_blank">${directApkLink}</a>
                 </div>
@@ -187,7 +189,7 @@ const sendInvitationEmail = async (email, fullName, role, stationName, invitedBy
             <div class="help-box">
                 <p style="margin: 0; font-size: 14px;">
                     <strong>❓ Need help?</strong> Contact your manager or
-                    <a href="mailto:support@paynotify.co.ke">support@paynotify.co.ke</a>
+                    <a href="mailto:support@paynotfy.dpdns.org">support@paynotfy.dpdns.org</a>
                 </p>
             </div>
         </div>
@@ -242,7 +244,7 @@ iOS (App Store): ${appStoreLink}
 Web App: ${getBaseUrl()}
 Desktop: ${desktopLink}
 
-❓ Need help? Contact support@paynotify.co.ke
+❓ Need help? Contact support@paynotfy.dpdns.org
 
 ---
 PayNotify - Petrol Station Management
@@ -252,7 +254,7 @@ PayNotify - Petrol Station Management
     try {
         console.log(`📧 Sending invitation email to ${email}...`);
         const { data, error } = await resend.emails.send({
-            from: `"PayNotify" <${process.env.SMTP_FROM || 'onboarding@resend.dev'}>`,
+            from: `PayNotify <${getFromAddress()}>`,  // ✅ UPDATED: uses verified domain
             to: [email],
             subject: `You're invited to join PayNotify as a ${role}! 🚀`,
             html: htmlContent,
@@ -410,7 +412,7 @@ const sendApprovalEmail = async (email, fullName, username, role, stationName, f
             <div class="help-box">
                 <p style="margin: 0; font-size: 14px;">
                     <strong>❓ Need help?</strong> Contact your manager or
-                    <a href="mailto:support@paynotify.co.ke" style="color: #0B3D2E;">support@paynotify.co.ke</a>
+                    <a href="mailto:support@paynotfy.dpdns.org" style="color: #0B3D2E;">support@paynotfy.dpdns.org</a>
                 </p>
             </div>
         </div>
@@ -455,7 +457,7 @@ Install steps:
 - Start recording transactions
 - View your performance
 
-❓ Need help? Contact support@paynotify.co.ke
+❓ Need help? Contact support@paynotfy.dpdns.org
 
 ---
 PayNotify - Petrol Station Management
@@ -465,7 +467,7 @@ PayNotify - Petrol Station Management
     try {
         console.log(`📧 Sending approval email to ${email}...`);
         const { data, error } = await resend.emails.send({
-            from: `"PayNotify" <${process.env.SMTP_FROM || 'onboarding@resend.dev'}>`,
+            from: `PayNotify <${getFromAddress()}>`,  // ✅ UPDATED: uses verified domain
             to: [email],
             subject: `🎉 Welcome to PayNotify, ${fullName}! Your account is approved.`,
             html: htmlContent,

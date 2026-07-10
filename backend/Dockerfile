@@ -9,8 +9,8 @@ RUN npm ci --only=production
 # Copy backend source code
 COPY backend/ ./
 
-# ✅ Copy Flutter web build into container at /app/flutter_web
-COPY frontend/build/web/ ./flutter_web/
+# ✅ Copy Flutter web build - use absolute path from build context
+COPY frontend/build/web/ /app/flutter_web/
 
 # Expose port
 EXPOSE 3000
