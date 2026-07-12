@@ -50,6 +50,11 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    // Rebuild when the tab changes so the Pending tab's combined
+    // invitations + approvals view swaps in/out correctly.
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _loadData();
   }
   
@@ -73,6 +78,9 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen>
       
       await Future.wait([
         provider.loadEmployees(),
+        // Loads the combined list: invitations not yet registered +
+        // registrations awaiting approval. Powers the Pending tab.
+        provider.loadAllPending(),
         _loadPumps(),
       ]);
       
@@ -151,6 +159,14 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen>
     return provider.employees;
   }
 
+  // MARK: - Get pure invitations (not yet registered) from Provider
+  // These have no `users` row yet, so they can't be represented as an
+  // Employee — they're rendered separately in the Pending tab.
+  List<Map<String, dynamic>> _getPendingInvitations() {
+    final provider = context.watch<ManagerProvider>();
+    return provider.pendingInvitations;
+  }
+
   // MARK: - Filtering & Sorting
   List<Employee> _getFilteredEmployees(List<Employee> employees) {
     return employees.where((emp) {
@@ -221,6 +237,29 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen>
       }
       return _sortAscending ? comparison : -comparison;
     });
+  }
+
+  // Applies the same search/role filter to raw invitation maps so the
+  // search box and role chips also affect the "Awaiting Registration"
+  // section of the Pending tab.
+  List<Map<String, dynamic>> _getFilteredInvitations(
+    List<Map<String, dynamic>> invitations,
+  ) {
+    return invitations.where((inv) {
+      if (_searchQuery.isNotEmpty) {
+        final query = _searchQuery.toLowerCase();
+        final name = (inv['full_name'] ?? inv['fullName'] ?? '').toString().toLowerCase();
+        final email = (inv['email'] ?? '').toString().toLowerCase();
+        if (!name.contains(query) && !email.contains(query)) return false;
+      }
+
+      if (_selectedRoleFilter != null) {
+        final role = (inv['role'] ?? '').toString().toLowerCase();
+        if (role != _selectedRoleFilter!.name.toLowerCase()) return false;
+      }
+
+      return true;
+    }).toList();
   }
 
   // MARK: - Employee Actions
@@ -421,6 +460,72 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen>
                       behavior: SnackBarBehavior.floating,
                     ),
                   );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('❌ Failed to resend: ${e.toString()}'),
+                      backgroundColor: _EmployeeConstants.errorRed,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _EmployeeConstants.primaryDark,
+            ),
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Resend for a raw invitation map (pure invitation, no Employee object yet).
+  void _resendInvitationRaw(Map<String, dynamic> invitation) {
+    final email = (invitation['email'] ?? '').toString();
+    final fullName = (invitation['full_name'] ?? invitation['fullName'] ?? '').toString();
+    final role = (invitation['role'] ?? '').toString();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Resend Invitation'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Send invitation again to $email?'),
+            const SizedBox(height: 8),
+            const Text(
+              'They will receive a new email with registration link and app download instructions.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                final provider = context.read<ManagerProvider>();
+                final success = await provider.resendInvitation(email, fullName, role);
+
+                if (mounted && success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('✅ Invitation resent to $email'),
+                      backgroundColor: Colors.blue,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                  await provider.loadAllPending();
                 }
               } catch (e) {
                 if (mounted) {
@@ -881,11 +986,265 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen>
     );
   }
 
+  // Section header used in the combined Pending tab list.
+  Widget _buildSectionHeader(String title, int count, IconData icon, Color color) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Text(
+            '$title ($count)',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: color,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // A single pure-invitation row (sent, not yet registered). No Employee
+  // object exists yet, so this is a lightweight card rather than
+  // reusing EmployeeCard — the only available action is Resend.
+  Widget _buildInvitationTile(Map<String, dynamic> invitation) {
+    final email = (invitation['email'] ?? '').toString();
+    final fullName = (invitation['full_name'] ?? invitation['fullName'] ?? '').toString();
+    final role = (invitation['role'] ?? '').toString();
+    final stationName = (invitation['station_name'] ?? invitation['stationName'] ?? '').toString();
+    final expiresAtRaw = invitation['expires_at'] ?? invitation['expiresAt'];
+
+    String expiryLabel = '';
+    if (expiresAtRaw != null) {
+      final expiresAt = DateTime.tryParse(expiresAtRaw.toString());
+      if (expiresAt != null) {
+        final expired = expiresAt.isBefore(DateTime.now());
+        expiryLabel = expired
+            ? 'Expired ${DateFormat('dd MMM').format(expiresAt)}'
+            : 'Expires ${DateFormat('dd MMM, HH:mm').format(expiresAt)}';
+      }
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.blue.shade100),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: Colors.blue.shade50,
+              child: Icon(Icons.mail_outline, color: Colors.blue.shade700, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    fullName.isNotEmpty ? fullName : email,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    email,
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      if (role.isNotEmpty)
+                        Chip(
+                          label: Text(role, style: const TextStyle(fontSize: 11)),
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          padding: EdgeInsets.zero,
+                        ),
+                      if (stationName.isNotEmpty)
+                        Text(
+                          stationName,
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                        ),
+                      if (expiryLabel.isNotEmpty)
+                        Text(
+                          expiryLabel,
+                          style: TextStyle(
+                            color: expiryLabel.startsWith('Expired')
+                                ? _EmployeeConstants.errorRed
+                                : Colors.grey.shade600,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () => _resendInvitationRaw(invitation),
+              icon: const Icon(Icons.send, size: 16),
+              label: const Text('Resend'),
+              style: TextButton.styleFrom(
+                foregroundColor: _EmployeeConstants.primaryDark,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Reusable list of Employee cards (used by All/Active/Inactive tabs and
+  // the "Awaiting Approval" section of the Pending tab).
+  Widget _buildEmployeeListItems(List<Employee> employees) {
+    return Column(
+      children: employees.map((employee) {
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: EmployeeCard(
+            employee: employee,
+            onTap: () => _showEmployeeDetails(employee),
+            onEdit: () => _editEmployee(employee),
+            onApprove: employee.isPending 
+                ? () => _approveEmployee(employee)
+                : null,
+            onResendInvite: employee.isPending 
+                ? () => _resendInvitation(employee)
+                : null,
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildEmptyState({
+    String title = 'No employees found',
+    String subtitle = 'Try adjusting your filters or add a new employee',
+    bool showActions = true,
+  }) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.people_outline,
+            size: 72,
+            color: Colors.grey.shade400,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            subtitle,
+            style: TextStyle(
+              color: Colors.grey.shade500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          if (showActions) ...[
+            const SizedBox(height: 24),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _addEmployee,
+                  icon: const Icon(Icons.person_add),
+                  label: const Text('Add Manually'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _EmployeeConstants.primaryDark,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: _inviteEmployee,
+                  icon: const Icon(Icons.send),
+                  label: const Text('Invite by Email'),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: _EmployeeConstants.primaryDark),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Combined Pending tab body: pure invitations (awaiting registration)
+  // above registered employees awaiting approval.
+  Widget _buildPendingTabBody(
+    List<Employee> pendingRegistrations,
+    List<Map<String, dynamic>> pendingInvitations,
+  ) {
+    if (pendingRegistrations.isEmpty && pendingInvitations.isEmpty) {
+      return _buildEmptyState(
+        title: 'Nothing pending',
+        subtitle: 'Invited employees and registrations awaiting approval will show up here',
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        HapticFeedback.mediumImpact();
+        await _loadData();
+      },
+      color: _EmployeeConstants.primaryDark,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (pendingInvitations.isNotEmpty) ...[
+            _buildSectionHeader(
+              'Awaiting Registration',
+              pendingInvitations.length,
+              Icons.mail_outline,
+              Colors.blue.shade700,
+            ),
+            ...pendingInvitations.map(_buildInvitationTile),
+            const SizedBox(height: 8),
+          ],
+          if (pendingRegistrations.isNotEmpty) ...[
+            _buildSectionHeader(
+              'Awaiting Approval',
+              pendingRegistrations.length,
+              Icons.how_to_reg_outlined,
+              _EmployeeConstants.warningOrange,
+            ),
+            _buildEmployeeListItems(pendingRegistrations),
+          ],
+        ],
+      ),
+    );
+  }
+
   // MARK: - Build
   @override
   Widget build(BuildContext context) {
     final employees = _getEmployees();
     final filteredEmployees = _getFilteredEmployees(employees);
+    final pendingInvitations = _getFilteredInvitations(_getPendingInvitations());
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > _EmployeeConstants.tabletBreakpoint;
     final isTablet = screenWidth > _EmployeeConstants.mobileBreakpoint && 
@@ -898,6 +1257,8 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen>
     } else {
       debugPrint('Mobile layout active');
     }
+
+    final isPendingTab = _tabController.index == 3;
     
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
@@ -916,11 +1277,15 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen>
               _selectedStatusFilter = null;
             });
           },
-          tabs: const [
-            Tab(text: 'All'),
-            Tab(text: 'Active'),
-            Tab(text: 'Inactive'),
-            Tab(text: 'Pending'),
+          tabs: [
+            const Tab(text: 'All'),
+            const Tab(text: 'Active'),
+            const Tab(text: 'Inactive'),
+            Tab(
+              text: _getPendingInvitations().isEmpty
+                  ? 'Pending'
+                  : 'Pending (${_getPendingInvitations().length + filteredEmployees.where((e) => e.status == EmployeeStatus.pending).length})',
+            ),
           ],
         ),
         actions: [
@@ -1148,7 +1513,9 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${filteredEmployees.length} employees found',
+                  isPendingTab
+                      ? '${pendingInvitations.length + filteredEmployees.length} pending items found'
+                      : '${filteredEmployees.length} employees found',
                   style: TextStyle(
                     color: Colors.grey.shade600,
                     fontSize: 14,
@@ -1173,83 +1540,35 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen>
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : filteredEmployees.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.people_outline,
-                              size: 72,
-                              color: Colors.grey.shade400,
+                : isPendingTab
+                    ? _buildPendingTabBody(filteredEmployees, pendingInvitations)
+                    : filteredEmployees.isEmpty
+                        ? _buildEmptyState()
+                        : RefreshIndicator(
+                            onRefresh: () async {
+                              HapticFeedback.mediumImpact();
+                              await _loadData();
+                            },
+                            color: _EmployeeConstants.primaryDark,
+                            child: ListView.builder(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: filteredEmployees.length,
+                              itemBuilder: (context, index) {
+                                final employee = filteredEmployees[index];
+                                return EmployeeCard(
+                                  employee: employee,
+                                  onTap: () => _showEmployeeDetails(employee),
+                                  onEdit: () => _editEmployee(employee),
+                                  onApprove: employee.isPending 
+                                      ? () => _approveEmployee(employee)
+                                      : null,
+                                  onResendInvite: employee.isPending 
+                                      ? () => _resendInvitation(employee)
+                                      : null,
+                                );
+                              },
                             ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No employees found',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Try adjusting your filters or add a new employee',
-                              style: TextStyle(
-                                color: Colors.grey.shade500,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 24),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ElevatedButton.icon(
-                                  onPressed: _addEmployee,
-                                  icon: const Icon(Icons.person_add),
-                                  label: const Text('Add Manually'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: _EmployeeConstants.primaryDark,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                OutlinedButton.icon(
-                                  onPressed: _inviteEmployee,
-                                  icon: const Icon(Icons.send),
-                                  label: const Text('Invite by Email'),
-                                  style: OutlinedButton.styleFrom(
-                                    side: const BorderSide(color: _EmployeeConstants.primaryDark),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: () async {
-                          HapticFeedback.mediumImpact();
-                          await _loadData();
-                        },
-                        color: _EmployeeConstants.primaryDark,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: filteredEmployees.length,
-                          itemBuilder: (context, index) {
-                            final employee = filteredEmployees[index];
-                            return EmployeeCard(
-                              employee: employee,
-                              onTap: () => _showEmployeeDetails(employee),
-                              onEdit: () => _editEmployee(employee),
-                              onApprove: employee.isPending 
-                                  ? () => _approveEmployee(employee)
-                                  : null,
-                              onResendInvite: employee.isPending 
-                                  ? () => _resendInvitation(employee)
-                                  : null,
-                            );
-                          },
-                        ),
-                      ),
+                          ),
           ),
         ],
       ),

@@ -110,16 +110,40 @@ class EmployeeService {
   }
 
   // ─────────────────────────────────────────────
-  // GET PENDING REGISTRATIONS
+  // GET PENDING REGISTRATIONS (legacy — registered users only)
   // ─────────────────────────────────────────────
 
   /// GET /api/employees/pending
+  /// Only returns users who have already completed registration and are
+  /// awaiting approval. Does NOT include invitations that haven't been
+  /// registered against yet. Prefer [getAllPending] for the manager
+  /// "Pending" tab.
   static Future<Map<String, dynamic>> getPendingRegistrations() async {
     try {
       final response = await ApiService.get('/employees/pending');
       return response;
     } catch (e) {
       debugPrint('getPendingRegistrations error: $e');
+      return {'success': false, 'message': e.toString(), 'data': []};
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // GET ALL PENDING (invitations + registrations combined)
+  // ─────────────────────────────────────────────
+
+  /// GET /api/employees/all-pending
+  /// Returns a single combined list of:
+  ///   - pending invitations (sent, not yet registered), type == 'invitation'
+  ///   - pending registrations (registered, awaiting approval), type == 'registration'
+  /// Each item includes a `type` field so the UI can distinguish them and
+  /// show the right action (resend vs approve/reject).
+  static Future<Map<String, dynamic>> getAllPending() async {
+    try {
+      final response = await ApiService.get('/employees/all-pending');
+      return response;
+    } catch (e) {
+      debugPrint('getAllPending error: $e');
       return {'success': false, 'message': e.toString(), 'data': []};
     }
   }

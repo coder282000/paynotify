@@ -1096,7 +1096,102 @@ const resendInvitation = async (req, res) => {
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
-// GET PENDING REGISTRATIONS
+// GET ALL PENDING (Invitations + Registrations)
+// ──────────────────────────────────────────────────────────────────────────────
+
+const getAllPending = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const userRole = req.user.role;
+
+        // Get both:
+        // 1. Pending invitations (no user yet)
+        // 2. Pending registrations (user registered, waiting for approval)
+        let query = `
+            SELECT 
+                ei.id as invitation_id,
+                ei.email,
+                ei.full_name,
+                ei.role,
+                ei.phone,
+                ei.created_at as invited_at,
+                ei.expires_at,
+                'invitation' as type,
+                NULL as username,
+                NULL as user_id,
+                NULL as employee_id,
+                NULL as registration_date,
+                s.id as station_id,
+                s.station_name
+            FROM employee_invitations ei
+            LEFT JOIN stations s ON ei.station_id = s.id
+            WHERE ei.status = 'pending'
+            AND ei.expires_at > NOW()
+
+            UNION ALL
+
+            SELECT 
+                NULL as invitation_id,
+                u.email,
+                u.full_name,
+                u.role,
+                u.phone,
+                u.created_at as invited_at,
+                NULL as expires_at,
+                'registration' as type,
+                u.username,
+                u.id as user_id,
+                e.id as employee_id,
+                u.created_at as registration_date,
+                s.id as station_id,
+                s.station_name
+            FROM users u
+            LEFT JOIN employees e ON u.id = e.user_id
+            LEFT JOIN stations s ON e.station_id = s.id
+            WHERE u.is_active = false
+            AND u.role IN ('attendant', 'supervisor', 'manager')
+            AND e.status = 'pending'
+        `;
+
+        const params = [];
+        let paramCount = 1;
+
+        // Role-based filtering
+        if (userRole === 'manager') {
+            query = `
+                SELECT * FROM (${query}) AS all_pending
+                WHERE station_id IN (SELECT id FROM stations WHERE manager_id = $1)
+            `;
+            params.push(userId);
+        } else if (userRole === 'owner') {
+            query = `
+                SELECT * FROM (${query}) AS all_pending
+                WHERE station_id IN (SELECT id FROM stations WHERE owner_id = $1)
+            `;
+            params.push(userId);
+        }
+
+        query += ` ORDER BY invited_at DESC`;
+
+        const result = await pool.query(query, params);
+
+        res.json({
+            success: true,
+            data: result.rows,
+            count: result.rows.length
+        });
+
+    } catch (err) {
+        console.error('❌ Get all pending error:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch pending items'
+        });
+    }
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// GET PENDING REGISTRATIONS (Legacy - kept for compatibility)
 // ──────────────────────────────────────────────────────────────────────────────
 
 const getPendingRegistrations = async (req, res) => {
@@ -1173,7 +1268,7 @@ const getPendingRegistrations = async (req, res) => {
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
-// APPROVE EMPLOYEE (UPDATED WITH EMAIL)
+// APPROVE EMPLOYEE
 // ──────────────────────────────────────────────────────────────────────────────
 
 const approveEmployee = async (req, res) => {
@@ -1253,7 +1348,7 @@ const approveEmployee = async (req, res) => {
 
             await pool.query('COMMIT');
 
-            // ✅ Send approval email (non-blocking)
+            // Send approval email (non-blocking)
             setImmediate(async () => {
                 try {
                     await sendApprovalEmail(
@@ -1321,5 +1416,6 @@ module.exports = {
     validateInvite,
     registerEmployee,
     getPendingRegistrations,
+    getAllPending,      // ← NEW: Shows invitations + registrations
     approveEmployee
 };

@@ -25,26 +25,33 @@ class ManagerProvider extends ChangeNotifier {
   List<ManagerTransaction> _filteredTransactions = [];
   List<String> _alerts = [];
   List<double> _salesData = [];
-  
+
   // Extended data for manager features
   List<pump_config.PumpConfig> _pumpConfigs = [];
   List<Employee> _employees = [];
   List<Customer> _customers = [];
-  
+
+  // Combined pending list: invitations (not yet registered) +
+  // registrations (registered, awaiting approval). Populated by
+  // loadAllPending(), backed by GET /api/employees/all-pending.
+  List<Map<String, dynamic>> _allPendingItems = [];
+
   // Stats
   int _activeAttendants = 0;
   int _pendingReports = 0;
   int _lowFuelPumps = 0;
   double _mpesaTotal = 0;
   double _cashTotal = 0;
-  
+
   // ─────────────────────────────────────────────
   // UI STATE
   // ─────────────────────────────────────────────
   bool _isLoading = false;
   bool _isRefreshing = false;
+  bool _isLoadingPending = false;
   String? _errorMessage;
-  
+  String? _pendingErrorMessage;
+
   // Debounce timer
   Timer? _notifyTimer;
 
@@ -61,9 +68,9 @@ class ManagerProvider extends ChangeNotifier {
     activeAttendants: 0,
     totalAttendants: 0,
   );
-  
+
   List<PumpStatus> get pumps => _pumps;
-  List<ManagerTransaction> get recentTransactions => 
+  List<ManagerTransaction> get recentTransactions =>
       _filteredTransactions.isEmpty ? _recentTransactions : _filteredTransactions;
   List<String> get alerts => _alerts;
   bool get hasAlerts => _alerts.isNotEmpty;
@@ -77,11 +84,21 @@ class ManagerProvider extends ChangeNotifier {
   bool get isRefreshing => _isRefreshing;
   String? get errorMessage => _errorMessage;
   bool get hasData => _recentTransactions.isNotEmpty || _pumps.isNotEmpty;
-  
+
   // Extended getters
   List<pump_config.PumpConfig> get pumpConfigs => _pumpConfigs;
   List<Employee> get employees => _employees;
   List<Customer> get customers => _customers;
+
+  // Combined pending list getters
+  List<Map<String, dynamic>> get allPendingItems => _allPendingItems;
+  List<Map<String, dynamic>> get pendingInvitations =>
+      _allPendingItems.where((item) => item['type'] == 'invitation').toList();
+  List<Map<String, dynamic>> get pendingRegistrationsList =>
+      _allPendingItems.where((item) => item['type'] == 'registration').toList();
+  int get allPendingCount => _allPendingItems.length;
+  bool get isLoadingPending => _isLoadingPending;
+  String? get pendingErrorMessage => _pendingErrorMessage;
 
   // ─────────────────────────────────────────────
   // SAFE NOTIFY (debounced)
@@ -109,7 +126,7 @@ class ManagerProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
-    
+
     try {
       // Load all data in parallel
       await Future.wait([
@@ -120,10 +137,10 @@ class ManagerProvider extends ChangeNotifier {
         _loadSalesChartData(),
         _loadStats(),
       ]);
-      
+
       _isLoading = false;
       notifyListeners();
-      
+
     } catch (e) {
       _isLoading = false;
       _errorMessage = e.toString();
@@ -136,7 +153,7 @@ class ManagerProvider extends ChangeNotifier {
   Future<void> _loadStationSummary() async {
     try {
       final dashboardData = await ManagerService.getManagerDashboard();
-      
+
       if (dashboardData != null) {
         _stationSummary = StationSummary(
           todaySales: _toDouble(dashboardData['today_sales'] ?? 0),
@@ -180,7 +197,7 @@ class ManagerProvider extends ChangeNotifier {
   Future<void> _loadPumps() async {
     try {
       final pumpsData = await PumpService.getPumps();
-      
+
       _pumps = pumpsData.map((json) => PumpStatus(
         id: json['id']?.toString() ?? '',
         number: json['pump_number']?.toString() ?? 'Pump ${json['id']}',
@@ -191,13 +208,13 @@ class ManagerProvider extends ChangeNotifier {
         lastReading: _toDouble(json['current_reading'] ?? 0),
         isActive: json['is_active'] ?? true,
       )).toList();
-      
+
       // Also load full pump configs for management
       _pumpConfigs = pumpsData.map((json) => pump_config.PumpConfig.fromBackendJson(json)).toList();
-      
+
       // Calculate low fuel pumps
       _lowFuelPumps = _pumpConfigs.where((p) => p.needsMaintenance).length;
-      
+
     } catch (e) {
       debugPrint('Load pumps error: $e');
       _pumps = [];
@@ -209,10 +226,10 @@ class ManagerProvider extends ChangeNotifier {
   Future<void> _loadRecentTransactions() async {
     try {
       final transactionsData = await TransactionService.getTransactions();
-      
+
       _recentTransactions = transactionsData.map((json) => ManagerTransaction(
         id: json['transaction_id']?.toString() ?? json['id']?.toString() ?? '',
-        time: json['created_at'] != null 
+        time: json['created_at'] != null
             ? DateTime.parse(json['created_at'].toString())
             : DateTime.now(),
         pump: json['pump_number']?.toString() ?? 'Pump ${json['pump_id']}',
@@ -221,16 +238,16 @@ class ManagerProvider extends ChangeNotifier {
         type: json['payment_type']?.toString() ?? 'cash',
         status: json['status']?.toString() ?? 'completed',
       )).toList();
-      
+
       // Calculate totals
       _mpesaTotal = _recentTransactions
           .where((t) => t.type == 'mpesa' && t.isCompleted)
           .fold(0.0, (sum, t) => sum + t.amount);
-      
+
       _cashTotal = _recentTransactions
           .where((t) => t.type == 'cash' && t.isCompleted)
           .fold(0.0, (sum, t) => sum + t.amount);
-          
+
     } catch (e) {
       debugPrint('Load transactions error: $e');
       _recentTransactions = [];
@@ -243,7 +260,7 @@ class ManagerProvider extends ChangeNotifier {
   Future<void> _loadAlerts() async {
     try {
       final alertsData = await ManagerService.getAlerts();
-      
+
       if (alertsData != null && alertsData['alerts'] != null) {
         _alerts = List<String>.from(alertsData['alerts']);
         _pendingReports = _toInt(alertsData['pending_reports'] ?? 0);
@@ -251,7 +268,7 @@ class ManagerProvider extends ChangeNotifier {
         _alerts = [];
         _pendingReports = 0;
       }
-      
+
       // Add low fuel alerts from pumps
       final lowFuelPumpsList = _pumpConfigs.where((p) => p.needsMaintenance).toList();
       for (final pump in lowFuelPumpsList) {
@@ -260,7 +277,7 @@ class ManagerProvider extends ChangeNotifier {
           _alerts.add(alert);
         }
       }
-      
+
     } catch (e) {
       debugPrint('Load alerts error: $e');
       _alerts = [];
@@ -272,7 +289,7 @@ class ManagerProvider extends ChangeNotifier {
   Future<void> _loadSalesChartData() async {
     try {
       final analyticsData = await ManagerService.getSalesAnalytics();
-      
+
       if (analyticsData != null && analyticsData['daily_sales'] != null) {
         _salesData = List<double>.from(analyticsData['daily_sales']);
       } else {
@@ -290,7 +307,7 @@ class ManagerProvider extends ChangeNotifier {
     try {
       final employeesData = await EmployeeService.getEmployees();
       _activeAttendants = employeesData['data']?.where((e) => e['is_active'] == true).length ?? 0;
-      
+
     } catch (e) {
       debugPrint('Load stats error: $e');
       _activeAttendants = 0;
@@ -353,6 +370,9 @@ class ManagerProvider extends ChangeNotifier {
       if (result['success'] == true) {
         _isLoading = false;
         notifyListeners();
+        // Keep the pending list in sync so the "Pending" tab reflects
+        // the new invitation immediately without a manual refresh.
+        unawaited(loadAllPending());
         return result;
       } else {
         _errorMessage = result['message'];
@@ -385,6 +405,8 @@ class ManagerProvider extends ChangeNotifier {
 
       if (result['success'] == true) {
         await loadEmployees();
+        // Remove the processed item from the combined pending list.
+        unawaited(loadAllPending());
         return true;
       }
       return false;
@@ -424,7 +446,10 @@ class ManagerProvider extends ChangeNotifier {
     }
   }
 
-  /// Get pending employee registrations
+  /// Get pending employee registrations (legacy — registered users only).
+  /// Prefer [loadAllPending] / [allPendingItems] for the manager UI, since
+  /// this only returns users who already completed registration and
+  /// misses invitations that haven't been registered against yet.
   Future<List<Map<String, dynamic>>> getPendingRegistrations() async {
     try {
       final result = await EmployeeService.getPendingRegistrations();
@@ -435,6 +460,40 @@ class ManagerProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('getPendingRegistrations error: $e');
       return [];
+    }
+  }
+
+  /// Load the combined pending list: invitations not yet registered
+  /// (type == 'invitation') + registrations awaiting approval
+  /// (type == 'registration'). Backed by GET /api/employees/all-pending.
+  ///
+  /// Use [pendingInvitations] / [pendingRegistrationsList] to split the
+  /// result if the UI needs separate sections, or [allPendingItems] /
+  /// [allPendingCount] for a single combined "Pending" tab.
+  Future<void> loadAllPending() async {
+    _isLoadingPending = true;
+    _pendingErrorMessage = null;
+    notifyListeners();
+
+    try {
+      final result = await EmployeeService.getAllPending();
+
+      if (result['success'] == true) {
+        final rawList = (result['data'] as List)
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .toList();
+        _allPendingItems = rawList;
+        debugPrint('Loaded ${_allPendingItems.length} pending items (invitations + registrations)');
+      } else {
+        _pendingErrorMessage = result['message'];
+        debugPrint('loadAllPending error: ${result['message']}');
+      }
+    } catch (e) {
+      _pendingErrorMessage = 'Failed to load pending items: $e';
+      debugPrint('loadAllPending exception: $e');
+    } finally {
+      _isLoadingPending = false;
+      notifyListeners();
     }
   }
 
@@ -562,11 +621,11 @@ class ManagerProvider extends ChangeNotifier {
   Future<void> loadCustomers() async {
     _isLoading = true;
     notifyListeners();
-    
+
     try {
       final customersData = await ManagerService.getCustomers();
       _customers = customersData.map((json) => Customer.fromBackendJson(json)).toList();
-      
+
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -580,11 +639,11 @@ class ManagerProvider extends ChangeNotifier {
   Future<bool> updateCustomerPoints(String customerId, int points) async {
     try {
       final success = await ManagerService.updateCustomerPoints(int.parse(customerId), points);
-      
+
       if (success) {
         await loadCustomers();
       }
-      
+
       return success;
     } catch (e) {
       debugPrint('Update customer points error: $e');
@@ -600,12 +659,12 @@ class ManagerProvider extends ChangeNotifier {
   Future<bool> updatePumpStatus(String pumpId, String status) async {
     try {
       final success = await PumpService.updatePumpStatus(int.parse(pumpId), status);
-      
+
       if (success) {
         await _loadPumps();
         notifyListeners();
       }
-      
+
       return success;
     } catch (e) {
       debugPrint('Update pump status error: $e');
@@ -617,12 +676,12 @@ class ManagerProvider extends ChangeNotifier {
   Future<bool> updateFuelPrice(String pumpId, double price) async {
     try {
       final success = await PumpService.updateFuelPrice(int.parse(pumpId), price);
-      
+
       if (success) {
         await _loadPumps();
         notifyListeners();
       }
-      
+
       return success;
     } catch (e) {
       debugPrint('Update fuel price error: $e');
@@ -685,10 +744,11 @@ class ManagerProvider extends ChangeNotifier {
   Future<void> refreshData() async {
     _isRefreshing = true;
     notifyListeners();
-    
+
     await loadDashboardData(DateTime.now());
     await loadEmployees();
-    
+    await loadAllPending();
+
     _isRefreshing = false;
     notifyListeners();
   }
@@ -696,6 +756,12 @@ class ManagerProvider extends ChangeNotifier {
   /// Clear error message
   void clearError() {
     _errorMessage = null;
+    notifyListeners();
+  }
+
+  /// Clear pending-list error message
+  void clearPendingError() {
+    _pendingErrorMessage = null;
     notifyListeners();
   }
 
