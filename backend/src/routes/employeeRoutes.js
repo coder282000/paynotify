@@ -14,6 +14,7 @@ const {
     validateInvite,
     registerEmployee,
     getPendingRegistrations,
+    getAllPending,       // ← ADDED: combined invitations + registrations
     approveEmployee
 } = require('../controllers/employeeController');
 
@@ -123,12 +124,23 @@ router.get(
 
 /**
  * GET /api/employees/pending
- * Get pending employee registrations for approval
+ * Get pending employee registrations for approval (legacy - registered users only)
  */
 router.get(
     '/pending',
     authorize('owner', 'manager'),
     getPendingRegistrations
+);
+
+/**
+ * GET /api/employees/all-pending
+ * Get combined pending invitations (not yet registered) + pending registrations
+ * (awaiting approval). This is the endpoint the manager "Pending" tab should use.
+ */
+router.get(
+    '/all-pending',
+    authorize('owner', 'manager'),
+    getAllPending
 );
 
 /**
@@ -168,6 +180,8 @@ router.put(
 /**
  * GET /api/employees/:id
  * Get single employee by ID
+ * NOTE: kept below /stats, /pending, /all-pending so those literal paths
+ * are not swallowed by this :id param route.
  */
 router.get(
     '/:id',
