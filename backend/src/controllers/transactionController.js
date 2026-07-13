@@ -1,5 +1,6 @@
 // src/controllers/transactionController.js
 const pool = require('../config/database');
+const { updateCustomerFromTransaction } = require('./customerController');
 
 /**
  * GET /api/transactions
@@ -17,6 +18,7 @@ const getTransactions = async (req, res) => {
                 t.amount,
                 t.phone,
                 t.customer_name,
+                t.customer_id,
                 t.payment_type,
                 t.status,
                 t.pump_id,
@@ -70,6 +72,7 @@ const getTransactions = async (req, res) => {
             amount: parseFloat(t.amount),
             phone: t.phone,
             customerName: t.customer_name,
+            customerId: t.customer_id,
             paymentType: t.payment_type,
             status: t.status,
             pumpId: t.pump_id,
@@ -98,11 +101,42 @@ const getTransactions = async (req, res) => {
 };
 
 /**
+ * Looks up a customer by phone (if provided) and, if found, links the
+ * transaction to them and awards loyalty points (1 per liter).
+ *
+ * Per business rule: an unmatched phone number is NOT an error and does
+ * NOT auto-create a customer — the sale just proceeds unlinked and
+ * earns no points. Returns { customerId, loyalty } where `loyalty` is
+ * null if no customer was linked, or the result of
+ * updateCustomerFromTransaction() if one was.
+ */
+async function linkCustomerToSale(customerPhone, amount, litersDispensed, attendantId) {
+    if (!customerPhone) {
+        return { customerId: null, loyalty: null };
+    }
+
+    const customerResult = await pool.query(
+        'SELECT id FROM customers WHERE phone = $1',
+        [customerPhone.trim()]
+    );
+
+    if (customerResult.rows.length === 0) {
+        // Not a registered loyalty member — proceed unlinked, no points.
+        return { customerId: null, loyalty: null };
+    }
+
+    const customerId = customerResult.rows[0].id;
+    const loyalty = await updateCustomerFromTransaction(customerId, amount, litersDispensed, attendantId);
+
+    return { customerId, loyalty };
+}
+
+/**
  * POST /api/transactions/cash
  * Record a cash sale transaction
  */
 const recordCashSale = async (req, res) => {
-    const { pump_id, amount, customer_name, liters_dispensed, note } = req.body;
+    const { pump_id, amount, customer_name, customer_phone, liters_dispensed, note } = req.body;
     const attendantId = req.user.userId;
 
     try {
@@ -127,13 +161,21 @@ const recordCashSale = async (req, res) => {
             });
         }
 
+        // Look up customer by phone (optional — see linkCustomerToSale)
+        const { customerId, loyalty } = await linkCustomerToSale(
+            customer_phone, amount, liters_dispensed, attendantId
+        );
+
         // Create transaction
         const result = await pool.query(
             `INSERT INTO transactions 
-             (amount, payment_type, status, pump_id, attendant_id, customer_name, liters_dispensed, note)
-             VALUES ($1, 'cash', 'completed', $2, $3, $4, $5, $6)
-             RETURNING id, amount, payment_type, status, pump_id, attendant_id, created_at`,
-            [parseFloat(amount), pump_id, attendantId, customer_name || null, liters_dispensed || null, note || null]
+             (amount, payment_type, status, pump_id, attendant_id, customer_name, phone, customer_id, liters_dispensed, note)
+             VALUES ($1, 'cash', 'completed', $2, $3, $4, $5, $6, $7, $8)
+             RETURNING id, amount, payment_type, status, pump_id, attendant_id, customer_id, created_at`,
+            [
+                parseFloat(amount), pump_id, attendantId, customer_name || null,
+                customer_phone || null, customerId, liters_dispensed || null, note || null
+            ]
         );
 
         const transaction = result.rows[0];
@@ -155,7 +197,14 @@ const recordCashSale = async (req, res) => {
                 status: transaction.status,
                 pumpId: transaction.pump_id,
                 attendantId: transaction.attendant_id,
-                createdAt: transaction.created_at
+                customerId: transaction.customer_id,
+                createdAt: transaction.created_at,
+                loyalty: loyalty ? {
+                    pointsEarned: loyalty.pointsEarned,
+                    newPointsBalance: loyalty.newPointsBalance,
+                    newTier: loyalty.newTier,
+                    tierChanged: loyalty.tierChanged
+                } : null
             }
         });
 
@@ -173,7 +222,7 @@ const recordCashSale = async (req, res) => {
  * Record a card sale transaction
  */
 const recordCardSale = async (req, res) => {
-    const { pump_id, amount, customer_name, liters_dispensed, note } = req.body;
+    const { pump_id, amount, customer_name, customer_phone, liters_dispensed, note } = req.body;
     const attendantId = req.user.userId;
 
     try {
@@ -198,13 +247,21 @@ const recordCardSale = async (req, res) => {
             });
         }
 
+        // Look up customer by phone (optional — see linkCustomerToSale)
+        const { customerId, loyalty } = await linkCustomerToSale(
+            customer_phone, amount, liters_dispensed, attendantId
+        );
+
         // Create transaction
         const result = await pool.query(
             `INSERT INTO transactions 
-             (amount, payment_type, status, pump_id, attendant_id, customer_name, liters_dispensed, note)
-             VALUES ($1, 'card', 'completed', $2, $3, $4, $5, $6)
-             RETURNING id, amount, payment_type, status, pump_id, attendant_id, created_at`,
-            [parseFloat(amount), pump_id, attendantId, customer_name || null, liters_dispensed || null, note || null]
+             (amount, payment_type, status, pump_id, attendant_id, customer_name, phone, customer_id, liters_dispensed, note)
+             VALUES ($1, 'card', 'completed', $2, $3, $4, $5, $6, $7, $8)
+             RETURNING id, amount, payment_type, status, pump_id, attendant_id, customer_id, created_at`,
+            [
+                parseFloat(amount), pump_id, attendantId, customer_name || null,
+                customer_phone || null, customerId, liters_dispensed || null, note || null
+            ]
         );
 
         const transaction = result.rows[0];
@@ -226,7 +283,14 @@ const recordCardSale = async (req, res) => {
                 status: transaction.status,
                 pumpId: transaction.pump_id,
                 attendantId: transaction.attendant_id,
-                createdAt: transaction.created_at
+                customerId: transaction.customer_id,
+                createdAt: transaction.created_at,
+                loyalty: loyalty ? {
+                    pointsEarned: loyalty.pointsEarned,
+                    newPointsBalance: loyalty.newPointsBalance,
+                    newTier: loyalty.newTier,
+                    tierChanged: loyalty.tierChanged
+                } : null
             }
         });
 

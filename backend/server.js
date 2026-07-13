@@ -10,11 +10,22 @@ require('dotenv').config();
 
 const pool = require('./src/config/database');
 
+// ── AUTH ROUTES ──────────────────────────────────────────────────────
 const authRoutes = require('./src/routes/authRoutes');
+
+// ── CORE ROUTES ──────────────────────────────────────────────────────
 const pumpRoutes = require('./src/routes/pumpRoutes');
 const transactionRoutes = require('./src/routes/transactionRoutes');
 const stationRoutes = require('./src/routes/stationRoutes');
 const employeeRoutes = require('./src/routes/employeeRoutes');
+
+// ── MANAGER ROUTES ──────────────────────────────────────────────────
+const managerRoutes = require('./src/routes/managerRoutes');
+
+// ── CUSTOMER ROUTES ──────────────────────────────────────────────────
+const customerRoutes = require('./src/routes/customerRoutes');
+
+// ── PUBLIC ROUTES ──────────────────────────────────────────────────
 const publicRoutes = require('./src/routes/publicRoutes');
 
 const app = express();
@@ -33,7 +44,7 @@ const allowedOrigins = [
     'http://localhost:3001',
     'https://unlatch-joystick-grievance.ngrok-free.dev',
     'https://paynotify-production.up.railway.app',
-    'https://paynotfy.dpdns.org',  // ✅ ADDED: Your new domain
+    'https://paynotfy.dpdns.org',
     process.env.FRONTEND_URL,
 ].filter(Boolean);
 
@@ -67,7 +78,7 @@ app.use(helmet({
                 "https://www.gstatic.com",
                 "https://unlatch-joystick-grievance.ngrok-free.dev",
                 "https://paynotify-production.up.railway.app",
-                "https://paynotfy.dpdns.org",  // ✅ ADDED
+                "https://paynotfy.dpdns.org",
                 "https://fonts.googleapis.com",
             ],
             styleSrc: [
@@ -76,7 +87,7 @@ app.use(helmet({
                 "https://fonts.googleapis.com",
                 "https://unlatch-joystick-grievance.ngrok-free.dev",
                 "https://paynotify-production.up.railway.app",
-                "https://paynotfy.dpdns.org",  // ✅ ADDED
+                "https://paynotfy.dpdns.org",
             ],
             imgSrc: ["'self'", "data:", "https:", "blob:"],
             fontSrc: [
@@ -89,7 +100,7 @@ app.use(helmet({
                 "'self'",
                 "https://unlatch-joystick-grievance.ngrok-free.dev",
                 "https://paynotify-production.up.railway.app",
-                "https://paynotfy.dpdns.org",  // ✅ ADDED
+                "https://paynotfy.dpdns.org",
                 "https://www.gstatic.com",
                 "https://fonts.gstatic.com",
                 "https://fonts.googleapis.com",
@@ -130,10 +141,10 @@ if (!fs.existsSync(downloadsPath)) {
 }
 app.use('/downloads', express.static(downloadsPath));
 
-// ✅ FIXED: Use flutter_web in production (matches Dockerfile)
+// ✅ Flutter web static files
 const FLUTTER_WEB_BUILD = process.env.NODE_ENV === 'production'
-    ? path.join(__dirname, 'flutter_web')              // Railway: /app/flutter_web
-    : path.join(__dirname, '..', 'frontend', 'build', 'web'); // Local dev
+    ? path.join(__dirname, 'flutter_web')
+    : path.join(__dirname, '..', 'frontend', 'build', 'web');
 
 const hasFlutterWeb = fs.existsSync(FLUTTER_WEB_BUILD);
 
@@ -184,7 +195,6 @@ app.get('/register', async (req, res) => {
                 }
             }
             
-            // Fallback redirect
             return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/#/register?token=${token}`);
         }
 
@@ -399,10 +409,20 @@ app.get('/api/info', (req, res) => {
             register: 'GET /register?token=xxx',
             invite_validate: 'GET /api/public/invite/:token',
             employee_register: 'POST /api/public/register',
+            // ── Core ──
             employees: 'GET /api/employees',
             stations: 'GET /api/stations',
             pumps: 'GET /api/pumps',
             transactions: 'GET /api/transactions',
+            // ── Manager ──
+            manager_dashboard: 'GET /api/manager/dashboard',
+            manager_alerts: 'GET /api/manager/alerts',
+            manager_analytics: 'GET /api/manager/analytics/sales',
+            manager_quick_stats: 'GET /api/manager/quick-stats',
+            manager_customers: 'GET /api/manager/customers',
+            manager_expenses: 'GET /api/manager/expenses',
+            manager_notifications: 'GET /api/manager/notifications',
+            // ── Downloads ──
             download: 'GET /downloads/paynotify.apk',
             download_api: 'GET /api/download/app'
         }
@@ -430,27 +450,42 @@ app.get('/api/health', async (req, res) => {
 });
 
 // ── API ROUTES ──────────────────────────────────────────────────────
+// ── Public Routes ──
 app.use('/api/public', publicRoutes);
+
+// ── Auth Routes ──
 app.use('/api/auth', authRoutes);
+
+// ── Core Routes ──
 app.use('/api/pumps', pumpRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/stations', stationRoutes);
 app.use('/api/employees', employeeRoutes);
 
+// ── Customer Routes ──
+app.use('/api/customers', customerRoutes);
+
+// ── Manager Routes ──
+app.use('/api/manager', managerRoutes);
+
 // ── SPA CATCH-ALL ──────────────────────────────────────────────────
 app.use((req, res, next) => {
+    // Skip API and download routes
     if (req.path.startsWith('/api') || req.path.startsWith('/downloads')) {
         return next();
     }
 
+    // Skip file extensions
     if (path.extname(req.path) !== '') {
         return next();
     }
 
+    // Skip registration route (already handled above)
     if (req.path === '/register') {
         return next();
     }
 
+    // Serve Flutter web index.html
     if (hasFlutterWeb) {
         const indexPath = path.join(FLUTTER_WEB_BUILD, 'index.html');
         if (fs.existsSync(indexPath)) {
@@ -458,6 +493,7 @@ app.use((req, res, next) => {
         }
     }
 
+    // Development fallback
     if (process.env.NODE_ENV === 'development' && process.env.FRONTEND_URL) {
         if (req.path === '/favicon.ico') {
             return res.status(204).end();
@@ -503,6 +539,20 @@ app.listen(PORT, () => {
     ║  📱 APK:         ${process.env.APK_DOWNLOAD_URL || `http://localhost:${PORT}/downloads/paynotify.apk`}
     ║  🌐 Flutter Web: ${hasFlutterWeb ? '✅ Available' : '❌ Not built'} ║
     ║  📦 Env:         ${process.env.NODE_ENV || 'development'}          ║
+    ╠══════════════════════════════════════════════════════════════════╣
+    ║  📋 Manager Endpoints:                                            ║
+    ║     GET  /api/manager/dashboard                                   ║
+    ║     GET  /api/manager/alerts                                      ║
+    ║     GET  /api/manager/analytics/sales                             ║
+    ║     GET  /api/manager/quick-stats                                 ║
+    ║     GET  /api/manager/customers                                   ║
+    ║     POST /api/manager/customers                                   ║
+    ║     PUT  /api/manager/customers/:id/points                        ║
+    ║     POST /api/manager/customers/:id/redeem                        ║
+    ║     GET  /api/manager/expenses                                    ║
+    ║     POST /api/manager/expenses                                    ║
+    ║     GET  /api/manager/notifications                               ║
+    ║     POST /api/manager/notifications                               ║
     ╚══════════════════════════════════════════════════════════════════╝
     `);
 });
