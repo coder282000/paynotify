@@ -328,7 +328,14 @@ class ManagerProvider extends ChangeNotifier {
       final result = await EmployeeService.getEmployees();
 
       if (result['success'] == true) {
-        final rawList = result['data'] as List<Map<String, dynamic>>;
+        // NOTE: `result['data'] as List<Map<String, dynamic>>` throws at
+        // runtime. json.decode() produces a List<dynamic> whose elements
+        // happen to be Map<String, dynamic> — the outer List type itself
+        // is NOT directly castable, even though every element is. This
+        // was silently emptying the employee list on every load.
+        final rawList = (result['data'] as List)
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .toList();
         _employees = rawList.map((json) => Employee.fromBackendJson(json)).toList();
         debugPrint('Loaded ${_employees.length} employees (manager view)');
       } else {

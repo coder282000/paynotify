@@ -46,22 +46,66 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen>
   // Pumps from provider
   List<Map<String, String>> _availablePumps = [];
 
+  // Tracks the previous tab index so we only trigger a refresh when we
+  // actually *enter* the Pending tab, not on every rebuild.
+  int _previousTabIndex = 0;
+
+  // Silently polls for new invitations/registrations while this screen
+  // is open. Desktop web has no usable pull-to-refresh gesture (that's
+  // a touch drag), so without this the Pending tab can go stale
+  // indefinitely with no way to notice new activity.
+  Timer? _autoRefreshTimer;
+  bool _isSilentRefreshing = false;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     // Rebuild when the tab changes so the Pending tab's combined
-    // invitations + approvals view swaps in/out correctly.
+    // invitations + approvals view swaps in/out correctly, and
+    // silently refresh pending data the moment the Pending tab opens.
     _tabController.addListener(() {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      setState(() {});
+      if (_tabController.index == 3 && _previousTabIndex != 3) {
+        _silentRefresh();
+      }
+      _previousTabIndex = _tabController.index;
     });
     _loadData();
+
+    // Background poll every 20s so the Pending tab stays current even
+    // if the manager just leaves the screen open (e.g. after sending
+    // an invite and waiting for the recipient to register).
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) _silentRefresh();
+    });
   }
   
   @override
   void dispose() {
+    _autoRefreshTimer?.cancel();
     _tabController.dispose();
     super.dispose();
+  }
+
+  /// Refreshes employees + combined pending list without showing the
+  /// full-screen loading spinner, so it doesn't interrupt whatever the
+  /// manager is currently looking at.
+  Future<void> _silentRefresh() async {
+    if (_isSilentRefreshing || !mounted) return;
+    _isSilentRefreshing = true;
+    try {
+      final provider = context.read<ManagerProvider>();
+      await Future.wait([
+        provider.loadEmployees(),
+        provider.loadAllPending(),
+      ]);
+    } catch (e) {
+      debugPrint('Silent refresh error: $e');
+    } finally {
+      _isSilentRefreshing = false;
+    }
   }
 
   // MARK: - Data Loading
@@ -1289,6 +1333,12 @@ class _EmployeeManagementScreenState extends State<EmployeeManagementScreen>
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_outlined),
+            tooltip: 'Refresh',
+            onPressed: _loadData,
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          ),
           IconButton(
             icon: const Icon(Icons.person_add_outlined),
             tooltip: 'Add Employee',
