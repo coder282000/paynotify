@@ -17,7 +17,7 @@ const getAllPumps = async (req, res) => {
         p.fuel_type,
         p.status,
         p.price_per_liter,
-        p.current_reading,
+        COALESCE(p.current_reading, p.current_meter, 0) as current_reading,
         p.tank_capacity,
         p.current_fuel_level,
         p.low_fuel_threshold,
@@ -49,13 +49,13 @@ const getAllPumps = async (req, res) => {
       id: pump.id,
       pumpNumber: pump.pump_number,
       fuelType: pump.fuel_type,
-      status: pump.status,
-      pricePerLiter: parseFloat(pump.price_per_liter),
+      status: pump.status || 'inactive',
+      pricePerLiter: parseFloat(pump.price_per_liter || 0),
       currentReading: parseFloat(pump.current_reading || 0),
       tankCapacity: parseFloat(pump.tank_capacity || 0),
       currentFuelLevel: parseFloat(pump.current_fuel_level || 0),
       lowFuelThreshold: parseFloat(pump.low_fuel_threshold || 15),
-      isActive: pump.is_active,
+      isActive: pump.is_active !== false,
       stationId: pump.station_id,
       stationName: pump.station_name,
       currentAttendantId: pump.current_attendant_id,
@@ -70,7 +70,13 @@ const getAllPumps = async (req, res) => {
 
   } catch (err) {
     console.error('Get all pumps error:', err);
-    res.status(500).json({ success: false, message: 'Failed to retrieve pumps' });
+    // Log the actual error for debugging
+    console.error('Error details:', err.message);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to retrieve pumps',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 };
 
@@ -89,7 +95,9 @@ const getPumpById = async (req, res) => {
     const result = await pool.query(
       `SELECT
           p.id, p.pump_number, p.fuel_type, p.status,
-          p.price_per_liter, p.current_reading, p.tank_capacity,
+          p.price_per_liter, 
+          COALESCE(p.current_reading, p.current_meter, 0) as current_reading,
+          p.tank_capacity,
           p.current_fuel_level, p.low_fuel_threshold,
           p.current_attendant_id, p.is_active, p.station_id,
           u.username AS attendant_username,
@@ -114,13 +122,13 @@ const getPumpById = async (req, res) => {
         id: pump.id,
         pumpNumber: pump.pump_number,
         fuelType: pump.fuel_type,
-        status: pump.status,
-        pricePerLiter: parseFloat(pump.price_per_liter),
+        status: pump.status || 'inactive',
+        pricePerLiter: parseFloat(pump.price_per_liter || 0),
         currentReading: parseFloat(pump.current_reading || 0),
         tankCapacity: parseFloat(pump.tank_capacity || 0),
         currentFuelLevel: parseFloat(pump.current_fuel_level || 0),
         lowFuelThreshold: parseFloat(pump.low_fuel_threshold || 15),
-        isActive: pump.is_active,
+        isActive: pump.is_active !== false,
         stationId: pump.station_id,
         stationName: pump.station_name,
         currentAttendant: pump.current_attendant_id ? {

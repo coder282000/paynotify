@@ -11,6 +11,7 @@ import 'package:paynotify/features/manager/presentation/screens/manager_dashboar
 import 'package:paynotify/features/owner/presentation/screens/owner_dashboard.dart';
 import 'package:paynotify/core/providers/auth_provider.dart';
 import 'package:paynotify/features/manager/presentation/providers/manager_provider.dart';
+import 'package:paynotify/features/manager/presentation/providers/customer_provider.dart'; // ✅ NEW: Import CustomerProvider
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +33,7 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ManagerProvider()),
+        ChangeNotifierProvider(create: (_) => CustomerProvider()), // ✅ NEW: Add CustomerProvider
       ],
       child: MaterialApp(
         title: 'PayNotify',
