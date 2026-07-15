@@ -1,6 +1,9 @@
+// lib/features/manager/presentation/widgets/customer_detail_dialog.dart
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../domain/models/customer_model.dart';
+import '../../domain/models/customer_tier.dart';  // ✅ ADD THIS IMPORT
 import '../../domain/models/customer_transaction.dart';
 import '../../domain/models/points_redemption.dart';
 
@@ -19,6 +22,46 @@ class CustomerDetailDialog extends StatelessWidget {
     required this.canRedeemPoints,
     required this.onRedeemPoints,
   });
+
+  // ── Helper methods for tier properties ──
+  String _getTierDisplayName(CustomerTier tier) {
+    switch (tier) {
+      case CustomerTier.bronze:
+        return 'Bronze';
+      case CustomerTier.silver:
+        return 'Silver';
+      case CustomerTier.gold:
+        return 'Gold';
+      case CustomerTier.platinum:
+        return 'Platinum';
+    }
+  }
+
+  IconData _getTierIcon(CustomerTier tier) {
+    switch (tier) {
+      case CustomerTier.bronze:
+        return Icons.emoji_events;
+      case CustomerTier.silver:
+        return Icons.emoji_events;
+      case CustomerTier.gold:
+        return Icons.emoji_events;
+      case CustomerTier.platinum:
+        return Icons.emoji_events;
+    }
+  }
+
+  Color _getTierColor(CustomerTier tier) {
+    switch (tier) {
+      case CustomerTier.bronze:
+        return const Color(0xFFCD7F32);
+      case CustomerTier.silver:
+        return const Color(0xFFC0C0C0);
+      case CustomerTier.gold:
+        return const Color(0xFFFFD700);
+      case CustomerTier.platinum:
+        return const Color(0xFFE5E4E2);
+    }
+  }
 
   Widget _buildInfoSection(String title, List<Widget> children) {
     return Column(
@@ -63,6 +106,15 @@ class CustomerDetailDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tierColor = _getTierColor(customer.tier);
+    final tierIcon = _getTierIcon(customer.tier);
+    final tierDisplayName = _getTierDisplayName(customer.tier);
+
+    // Safe date formatting - handle null lastPurchaseDate
+    final String lastPurchaseFormatted = customer.lastPurchaseDate != null
+        ? DateFormat('dd MMM yyyy').format(customer.lastPurchaseDate!)
+        : 'Never';
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
@@ -82,8 +134,8 @@ class CustomerDetailDialog extends StatelessWidget {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    customer.tier.color,
-                    customer.tier.color.withValues(alpha: 0.8),
+                    tierColor,
+                    tierColor.withValues(alpha: 0.8),
                   ],
                 ),
                 borderRadius: const BorderRadius.only(
@@ -102,8 +154,8 @@ class CustomerDetailDialog extends StatelessWidget {
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Icon(
-                          customer.tier.icon,
-                          color: customer.tier.color,
+                          tierIcon,
+                          color: tierColor,
                           size: 32,
                         ),
                       ),
@@ -122,7 +174,7 @@ class CustomerDetailDialog extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              customer.tier.displayName,
+                              tierDisplayName,
                               style: TextStyle(
                                 fontSize: 14,
                                 color: Colors.white.withValues(alpha: 0.9),
@@ -145,7 +197,7 @@ class CustomerDetailDialog extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: customer.tier.color,
+                            color: tierColor,
                           ),
                         ),
                       ),
@@ -281,7 +333,7 @@ class CustomerDetailDialog extends StatelessWidget {
                     _buildInfoSection('Statistics', [
                       _buildInfoRow('Total Transactions', '${customer.totalTransactions}', Icons.receipt_outlined),
                       _buildInfoRow('Customer Since', DateFormat('dd MMM yyyy').format(customer.joinDate), Icons.calendar_today_outlined),
-                      _buildInfoRow('Last Purchase', DateFormat('dd MMM yyyy').format(customer.lastPurchaseDate), Icons.access_time_outlined),
+                      _buildInfoRow('Last Purchase', lastPurchaseFormatted, Icons.access_time_outlined),
                     ]),
                     
                     if (customer.notes != null) ...[

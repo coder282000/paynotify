@@ -1,6 +1,9 @@
+// lib/features/manager/presentation/widgets/customer_card.dart
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../domain/models/customer_model.dart';
+import '../../domain/models/customer_tier.dart';
 
 class CustomerCard extends StatelessWidget {
   final Customer customer;
@@ -16,8 +19,52 @@ class CustomerCard extends StatelessWidget {
     required this.onRedeemPoints,
   });
 
+  // ── Helper methods for tier properties ──
+  String _getTierDisplayName(CustomerTier tier) {
+    switch (tier) {
+      case CustomerTier.bronze:
+        return 'Bronze';
+      case CustomerTier.silver:
+        return 'Silver';
+      case CustomerTier.gold:
+        return 'Gold';
+      case CustomerTier.platinum:
+        return 'Platinum';
+    }
+  }
+
+  IconData _getTierIcon(CustomerTier tier) {
+    switch (tier) {
+      case CustomerTier.bronze:
+        return Icons.emoji_events;
+      case CustomerTier.silver:
+        return Icons.emoji_events;
+      case CustomerTier.gold:
+        return Icons.emoji_events;
+      case CustomerTier.platinum:
+        return Icons.emoji_events;
+    }
+  }
+
+  Color _getTierColor(CustomerTier tier) {
+    switch (tier) {
+      case CustomerTier.bronze:
+        return const Color(0xFFCD7F32);
+      case CustomerTier.silver:
+        return const Color(0xFFC0C0C0);
+      case CustomerTier.gold:
+        return const Color(0xFFFFD700);
+      case CustomerTier.platinum:
+        return const Color(0xFFE5E4E2);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final tierColor = _getTierColor(customer.tier);
+    final tierIcon = _getTierIcon(customer.tier);
+    final tierDisplayName = _getTierDisplayName(customer.tier);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
@@ -36,12 +83,12 @@ class CustomerCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: customer.tier.color.withValues(alpha: 0.1),
+                      color: tierColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      customer.tier.icon,
-                      color: customer.tier.color,
+                      tierIcon,
+                      color: tierColor,
                       size: 24,
                     ),
                   ),
@@ -67,15 +114,15 @@ class CustomerCard extends StatelessWidget {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: customer.tier.color.withValues(alpha: 0.1),
+                                color: tierColor.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
-                                customer.tier.displayName,
+                                tierDisplayName,
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
-                                  color: customer.tier.color,
+                                  color: tierColor,
                                 ),
                               ),
                             ),

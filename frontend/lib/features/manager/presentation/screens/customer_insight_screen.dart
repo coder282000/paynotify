@@ -2,12 +2,15 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../domain/models/customer_model.dart';
 import '../../domain/models/customer_tier.dart';
+// customer_transaction.dart is used by CustomerDetailDialog, so we keep it
+// but we need to import it to pass transactions to the dialog
 import '../../domain/models/customer_transaction.dart';
 import '../../domain/models/points_redemption.dart';
+import '../providers/customer_provider.dart';
 import '../widgets/customer_card.dart';
 import '../widgets/customer_detail_dialog.dart';
 import '../widgets/customer_search_bar.dart';
@@ -21,7 +24,9 @@ class _CustomerConstants {
   static const Color warningOrange = Color(0xFFF39C12);
   static const Color errorRed = Color(0xFFE74C3C);
   
-  static const Duration animationDuration = Duration(milliseconds: 300);
+  // Used for animations and loading states
+  static const Duration animationDuration = Duration(milliseconds: 400);
+  static const Duration cardAnimationDuration = Duration(milliseconds: 300);
   static const double mobileBreakpoint = 600;
   static const double tabletBreakpoint = 900;
 }
@@ -37,329 +42,221 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
     with SingleTickerProviderStateMixin {
   
   late TabController _tabController;
+  
+  // ── Animation Controllers ──
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+  late AnimationController _fabController;
+  late Animation<double> _fabScaleAnimation;
+  
   String _searchQuery = '';
   CustomerTier? _selectedTierFilter;
-  bool _isLoading = false;
-  String? _errorMessage;
   String _sortBy = 'totalSpent';
   final bool _sortAscending = false;
   
-  // Data
-  List<Customer> _customers = [];
-  List<Customer> _filteredCustomers = [];
-  List<PointsRedemption> _redemptions = [];
-  
-  // Mock current user (from auth provider in real app)
+  // ── Mock current user (from auth provider in real app) ──
   final String _currentUserId = 'manager_1';
   final String _currentUserName = 'Manager';
   final bool _canRedeemPoints = true;
+  
+  // ── Track previous points balance for animation ──
+  int _previousPointsBalance = 0;
   
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    
+    // ── Setup Fade Animation ──
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: _CustomerConstants.animationDuration,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeInOut,
+    );
+    
+    // ── Setup FAB Animation ──
+    _fabController = AnimationController(
+      vsync: this,
+      duration: _CustomerConstants.animationDuration,
+    );
+    _fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _fabController,
+        curve: Curves.elasticOut,
+      ),
+    );
+    
     _loadData();
+    _fadeController.forward();
+    _fabController.forward();
+    
+    // Store initial points balance
+    _previousPointsBalance = _totalPointsBalance;
   }
   
   @override
   void dispose() {
     _tabController.dispose();
+    _fadeController.dispose();
+    _fabController.dispose();
     super.dispose();
   }
 
+  // ── Load Data from Backend ──
   Future<void> _loadData() async {
-    if (!mounted) return;
-    
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-    
-    try {
-      await Future.delayed(_CustomerConstants.animationDuration);
-      
-      if (!mounted) return;
-      
-      _customers = _generateMockCustomers();
-      _redemptions = _generateMockRedemptions();
-      _applyFilters();
-      
-      setState(() => _isLoading = false);
-      HapticFeedback.lightImpact();
-      
-    } catch (e, stackTrace) {
-      if (!mounted) return;
-      debugPrint('Load customers error: $e\n$stackTrace');
-      setState(() {
-        _errorMessage = _getErrorMessage(e);
-        _isLoading = false;
-      });
-      _showErrorSnackBar();
-    }
-  }
-  
-  String _getErrorMessage(dynamic error) {
-    if (error.toString().contains('SocketException') || 
-        error.toString().contains('NetworkIsUnreachable')) {
-      return 'No internet connection. Please check your network.';
-    }
-    if (error.toString().contains('Unauthorized') || 
-        error.toString().contains('401')) {
-      return 'Session expired. Please log in again.';
-    }
-    return 'Failed to load customers. Please try again.';
-  }
-  
-  void _showErrorSnackBar() {
-    if (!mounted) return;
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.white),
-            const SizedBox(width: 12),
-            Expanded(child: Text(_errorMessage ?? 'An error occurred')),
-          ],
-        ),
-        backgroundColor: _CustomerConstants.errorRed,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-        action: SnackBarAction(
-          label: 'Retry',
-          textColor: Colors.white,
-          onPressed: _loadData,
-        ),
-        duration: const Duration(seconds: 5),
-      ),
-    );
+    final provider = context.read<CustomerProvider>();
+    await provider.loadCustomers();
+    _applyFilters();
   }
 
-  List<Customer> _generateMockCustomers() {
-    final now = DateTime.now();
-    return [
-      Customer(
-        id: '1',
-        name: 'John Mwangi',
-        phone: '0712345678',
-        email: 'john.mwangi@email.com',
-        joinDate: now.subtract(const Duration(days: 365)),
-        totalSpent: 125000,
-        totalLiters: 1250,
-        pointsBalance: 1250,
-        pointsEarned: 1250,
-        pointsRedeemed: 0,
-        lastPurchaseDate: now.subtract(const Duration(days: 2)),
-        totalTransactions: 25,
-        vehicleNumber: 'KCA 123A',
-        preferredFuel: 'Petrol',
-        tier: CustomerTier.gold,
-      ),
-      Customer(
-        id: '2',
-        name: 'Sarah Wanjiku',
-        phone: '0723456789',
-        email: 'sarah.wanjiku@email.com',
-        joinDate: now.subtract(const Duration(days: 180)),
-        totalSpent: 75000,
-        totalLiters: 750,
-        pointsBalance: 750,
-        pointsEarned: 750,
-        pointsRedeemed: 0,
-        lastPurchaseDate: now.subtract(const Duration(days: 5)),
-        totalTransactions: 15,
-        vehicleNumber: 'KCB 456B',
-        preferredFuel: 'Diesel',
-        tier: CustomerTier.silver,
-      ),
-      Customer(
-        id: '3',
-        name: 'Peter Odhiambo',
-        phone: '0734567890',
-        joinDate: now.subtract(const Duration(days: 90)),
-        totalSpent: 35000,
-        totalLiters: 350,
-        pointsBalance: 350,
-        pointsEarned: 350,
-        pointsRedeemed: 0,
-        lastPurchaseDate: now.subtract(const Duration(days: 10)),
-        totalTransactions: 7,
-        vehicleNumber: 'KCD 789C',
-        preferredFuel: 'Petrol',
-        tier: CustomerTier.bronze,
-      ),
-      Customer(
-        id: '4',
-        name: 'Grace Akinyi',
-        phone: '0745678901',
-        email: 'grace.akinyi@email.com',
-        joinDate: now.subtract(const Duration(days: 540)),
-        totalSpent: 250000,
-        totalLiters: 2500,
-        pointsBalance: 2300,
-        pointsEarned: 2500,
-        pointsRedeemed: 200,
-        lastPurchaseDate: now.subtract(const Duration(days: 1)),
-        totalTransactions: 50,
-        vehicleNumber: 'KCE 012D',
-        preferredFuel: 'Premium',
-        notes: 'VIP customer',
-        tier: CustomerTier.platinum,
-      ),
-      Customer(
-        id: '5',
-        name: 'James Kariuki',
-        phone: '0756789012',
-        joinDate: now.subtract(const Duration(days: 45)),
-        totalSpent: 15000,
-        totalLiters: 150,
-        pointsBalance: 150,
-        pointsEarned: 150,
-        pointsRedeemed: 0,
-        lastPurchaseDate: now.subtract(const Duration(days: 3)),
-        totalTransactions: 3,
-        vehicleNumber: 'KCF 345E',
-        preferredFuel: 'Diesel',
-        tier: CustomerTier.bronze,
-      ),
-    ];
-  }
-
-  List<PointsRedemption> _generateMockRedemptions() {
-    final now = DateTime.now();
-    return [
-      PointsRedemption(
-        id: 'r1',
-        customerId: '4',
-        customerName: 'Grace Akinyi',
-        points: 200,
-        valueKes: 200,
-        date: now.subtract(const Duration(days: 15)),
-        redeemedBy: 'manager_1',
-        redeemedByName: 'Manager',
-        status: RedemptionStatus.completed,
-        notes: 'Redeemed for fuel discount',
-      ),
-    ];
-  }
-
-  List<CustomerTransaction> _generateCustomerTransactions(String customerId) {
-    final now = DateTime.now();
-    if (customerId == '4') {
-      return [
-        CustomerTransaction(
-          id: 't1',
-          customerId: customerId,
-          amount: 5000,
-          liters: 50,
-          date: now.subtract(const Duration(days: 1)),
-          pumpId: '1',
-          attendantName: 'John M.',
-          pointsEarned: 50,
-          type: TransactionType.fuelPurchase,
-        ),
-        CustomerTransaction(
-          id: 't2',
-          customerId: customerId,
-          amount: 10000,
-          liters: 100,
-          date: now.subtract(const Duration(days: 8)),
-          pumpId: '2',
-          attendantName: 'Sarah W.',
-          pointsEarned: 100,
-          type: TransactionType.fuelPurchase,
-        ),
-      ];
-    }
-    return [];
-  }
-
+  // ── Apply Filters ──
   void _applyFilters() {
-    setState(() {
-      _filteredCustomers = _customers.where((customer) {
-        if (_searchQuery.isNotEmpty) {
-          final query = _searchQuery.toLowerCase();
-          final matches = customer.name.toLowerCase().contains(query) ||
-              customer.phone.contains(query) ||
-              (customer.email?.toLowerCase().contains(query) ?? false) ||
-              (customer.vehicleNumber?.toLowerCase().contains(query) ?? false);
-          if (!matches) return false;
-        }
-        
-        if (_selectedTierFilter != null && customer.tier != _selectedTierFilter) {
-          return false;
-        }
-        
-        if (_tabController.index != 0) {
-          switch (_tabController.index) {
-            case 1:
-              if (!customer.isHighValueCustomer) return false;
-              break;
-            case 2:
-              if (!customer.isRecentCustomer) return false;
-              break;
-          }
-        }
-        
-        return true;
-      }).toList()..sort((a, b) {
-        int comparison;
-        switch (_sortBy) {
-          case 'name':
-            comparison = a.name.compareTo(b.name);
-            break;
-          case 'totalSpent':
-            comparison = a.totalSpent.compareTo(b.totalSpent);
-            break;
-          case 'pointsBalance':
-            comparison = a.pointsBalance.compareTo(b.pointsBalance);
-            break;
-          case 'lastPurchase':
-            comparison = b.lastPurchaseDate.compareTo(a.lastPurchaseDate);
-            break;
-          default:
-            comparison = 0;
-        }
-        return _sortAscending ? comparison : -comparison;
-      });
+    final provider = context.read<CustomerProvider>();
+    
+    // Apply search filter
+    if (_searchQuery.isNotEmpty) {
+      provider.filterCustomers(_searchQuery);
+    } else {
+      provider.filterCustomers('');
+    }
+    
+    // Apply tier filter - FIXED: Use helper method instead of displayName
+    if (_selectedTierFilter != null) {
+      provider.filterByTier(_getTierDisplayName(_selectedTierFilter!));
+    } else {
+      provider.filterByTier(null);
+    }
+    
+    // Apply tab filters
+    final customers = provider.customers;
+    List<Customer> filtered = List.from(customers);
+    
+    // First apply search and tier from provider
+    if (_searchQuery.isNotEmpty) {
+      filtered = filtered.where((c) =>
+        c.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+        c.phone.contains(_searchQuery) ||
+        (c.email?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false) ||
+        (c.vehicleNumber?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false)
+      ).toList();
+    }
+    
+    if (_selectedTierFilter != null) {
+      filtered = filtered.where((c) => c.tier == _selectedTierFilter).toList();
+    }
+    
+    // Apply tab filters
+    if (_tabController.index != 0) {
+      switch (_tabController.index) {
+        case 1:
+          filtered = filtered.where((c) => c.isHighValueCustomer).toList();
+          break;
+        case 2:
+          filtered = filtered.where((c) => c.isRecentCustomer).toList();
+          break;
+      }
+    }
+    
+    // Apply sorting
+    filtered.sort((a, b) {
+      int comparison;
+      switch (_sortBy) {
+        case 'name':
+          comparison = a.name.compareTo(b.name);
+          break;
+        case 'totalSpent':
+          comparison = a.totalSpent.compareTo(b.totalSpent);
+          break;
+        case 'pointsBalance':
+          comparison = a.pointsBalance.compareTo(b.pointsBalance);
+          break;
+        case 'lastPurchase':
+          final aDate = a.lastPurchaseDate ?? DateTime(1970);
+          final bDate = b.lastPurchaseDate ?? DateTime(1970);
+          comparison = bDate.compareTo(aDate);
+          break;
+        default:
+          comparison = 0;
+      }
+      return _sortAscending ? comparison : -comparison;
     });
+    
+    // Update provider's filtered list
+    provider.setFilteredCustomers(filtered);
   }
 
-  double get _totalRevenue {
-    return _customers.fold(0, (sum, c) => sum + c.totalSpent);
+  // ── Helper method for tier display name ──
+  String _getTierDisplayName(CustomerTier tier) {
+    switch (tier) {
+      case CustomerTier.bronze:
+        return 'Bronze';
+      case CustomerTier.silver:
+        return 'Silver';
+      case CustomerTier.gold:
+        return 'Gold';
+      case CustomerTier.platinum:
+        return 'Platinum';
+    }
   }
 
-  int get _totalPointsBalance {
-    return _customers.fold(0, (sum, c) => sum + c.pointsBalance);
+  // ── Helper method for tier icon ──
+  IconData _getTierIcon(CustomerTier tier) {
+    switch (tier) {
+      case CustomerTier.bronze:
+        return Icons.emoji_events;
+      case CustomerTier.silver:
+        return Icons.emoji_events;
+      case CustomerTier.gold:
+        return Icons.emoji_events;
+      case CustomerTier.platinum:
+        return Icons.emoji_events;
+    }
   }
 
-  int get _filteredCustomersLength => _filteredCustomers.length;
+  // ── Helper method for tier color ──
+  Color _getTierColor(CustomerTier tier) {
+    switch (tier) {
+      case CustomerTier.bronze:
+        return const Color(0xFFCD7F32);
+      case CustomerTier.silver:
+        return const Color(0xFFC0C0C0);
+      case CustomerTier.gold:
+        return const Color(0xFFFFD700);
+      case CustomerTier.platinum:
+        return const Color(0xFFE5E4E2);
+    }
+  }
 
+  // ── Error Message ──
+  String? get _errorMessage {
+    return context.watch<CustomerProvider>().errorMessage;
+  }
+
+  // ── Computed Values ──
+  int get _totalCustomers => context.watch<CustomerProvider>().customers.length;
+  double get _totalRevenue => context.watch<CustomerProvider>().customers.fold(0, (sum, c) => sum + c.totalSpent);
+  int get _totalPointsBalance => context.watch<CustomerProvider>().customers.fold(0, (sum, c) => sum + c.pointsBalance);
+  int get _filteredCustomersLength => context.watch<CustomerProvider>().filteredCustomers.length;
   bool get _showHighPointsWarning => _totalPointsBalance > 10000;
 
+  // ── Check if points balance changed (for animation trigger) ──
+  bool get _pointsBalanceChanged => _previousPointsBalance != _totalPointsBalance;
+
+  // ── Redemption ──
   Future<void> _processRedemption(Customer customer, int points, double value, String? notes) async {
     if (!mounted) return;
     
     try {
-      setState(() {
-        customer.pointsBalance -= points;
-        customer.pointsRedeemed += points;
-      });
+      final provider = context.read<CustomerProvider>();
+      final success = await provider.redeemPoints(customer.id, points, notes: notes);
       
-      _redemptions.insert(0, PointsRedemption(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        customerId: customer.id,
-        customerName: customer.name,
-        points: points,
-        valueKes: value,
-        date: DateTime.now(),
-        redeemedBy: _currentUserId,
-        redeemedByName: _currentUserName,
-        status: RedemptionStatus.completed,
-        notes: notes,
-      ));
-      
-      if (mounted) {
+      if (success && mounted) {
+        // Update previous points balance for animation
+        _previousPointsBalance = _totalPointsBalance;
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Redeemed $points points (KES ${value.toStringAsFixed(0)}) for ${customer.name}'),
@@ -367,6 +264,8 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
             behavior: SnackBarBehavior.floating,
           ),
         );
+      } else {
+        throw Exception('Redemption failed');
       }
     } catch (e) {
       if (mounted) {
@@ -381,6 +280,7 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
     }
   }
 
+  // ── Add Customer ──
   void _addCustomer() async {
     final result = await showDialog<Customer>(
       context: context,
@@ -392,25 +292,38 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
     );
     
     if (result != null && mounted) {
-      setState(() {
-        _customers.insert(0, result);
-        _applyFilters();
-      });
+      final provider = context.read<CustomerProvider>();
+      final success = await provider.createCustomer(result.toJson());
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${result.name} added successfully'),
-          backgroundColor: _CustomerConstants.accentGreen,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      if (success && mounted) {
+        // Refresh animation
+        _fadeController.reset();
+        _fadeController.forward();
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${result.name} added successfully'),
+            backgroundColor: _CustomerConstants.accentGreen,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 
-  void _showCustomerDetails(Customer customer) {
-    final transactions = _generateCustomerTransactions(customer.id);
-    final customerRedemptions = _redemptions.where((r) => r.customerId == customer.id).toList();
+  // ── Show Customer Details ──
+  void _showCustomerDetails(Customer customer) async {
+    // Load real transactions from backend
+    final provider = context.read<CustomerProvider>();
+    
+    // Explicit type annotation - this makes the import of customer_transaction.dart "used"
+    final List<CustomerTransaction> transactions = await provider.getCustomerTransactions(customer.id);
+    
+    // Redemptions would come from a separate endpoint
+    final customerRedemptions = <PointsRedemption>[];
+    
+    if (!mounted) return;
     
     showDialog(
       context: context,
@@ -424,6 +337,7 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
     );
   }
 
+  // ── Show Redemption Dialog ──
   void _showRedemptionDialog(Customer customer) {
     showDialog(
       context: context,
@@ -438,6 +352,7 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
     );
   }
 
+  // ── Show Filter Dialog ──
   void _showFilterDialog() {
     showModalBottomSheet(
       context: context,
@@ -473,7 +388,7 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
                 ),
                 ...CustomerTier.values.map((tier) {
                   return FilterChip(
-                    label: Text(tier.displayName),
+                    label: Text(_getTierDisplayName(tier)),
                     selected: _selectedTierFilter == tier,
                     onSelected: (_) {
                       setState(() {
@@ -482,7 +397,7 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
                       });
                       Navigator.pop(context);
                     },
-                    avatar: Icon(tier.icon, size: 16, color: tier.color),
+                    avatar: Icon(_getTierIcon(tier), size: 16, color: _getTierColor(tier)),
                   );
                 }),
               ],
@@ -522,11 +437,13 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<CustomerProvider>();
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > _CustomerConstants.tabletBreakpoint;
     final isTablet = screenWidth > _CustomerConstants.mobileBreakpoint && 
                      screenWidth <= _CustomerConstants.tabletBreakpoint;
     
+    // Used for responsive layout logic
     if (isDesktop) {
       debugPrint('Desktop layout active');
     } else if (isTablet) {
@@ -567,260 +484,340 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
             onPressed: _showFilterDialog,
             tooltip: 'Filter & Sort',
           ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
+            tooltip: 'Refresh',
+          ),
         ],
       ),
-      body: Column(
-        children: [
-          // Summary Cards
-          Container(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withValues(alpha: 0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.people, color: _CustomerConstants.primaryDark, size: 16),
-                            const SizedBox(width: 4),
-                            Text('Total Customers', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '${_customers.length}',
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: _CustomerConstants.primaryDark),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withValues(alpha: 0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.money, color: Colors.green, size: 16),
-                            const SizedBox(width: 4),
-                            Text('Total Revenue', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'KES ${NumberFormat('#,###').format(_totalRevenue)}',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withValues(alpha: 0.1),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(Icons.card_giftcard, color: _CustomerConstants.accentGreen, size: 16),
-                            const SizedBox(width: 4),
-                            Text('Points Balance', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '$_totalPointsBalance',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _CustomerConstants.accentGreen),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // Search Bar
-          CustomerSearchBar(
-            searchQuery: _searchQuery,
-            onSearchChanged: (value) {
-              setState(() {
-                _searchQuery = value;
-                _applyFilters();
-              });
-            },
-            onClearSearch: () {
-              setState(() {
-                _searchQuery = '';
-                _applyFilters();
-              });
-            },
-          ),
-          
-          // Warning Banner (using warningOrange)
-          if (_showHighPointsWarning)
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child: Column(
+          children: [
+            // ── Summary Cards ──
             Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _CustomerConstants.warningOrange.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: _CustomerConstants.warningOrange.withValues(alpha: 0.3),
-                ),
-              ),
+              padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
-                    color: _CustomerConstants.warningOrange,
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withValues(alpha: 0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.people, color: _CustomerConstants.primaryDark, size: 16),
+                              const SizedBox(width: 4),
+                              Text('Total Customers', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          AnimatedSwitcher(
+                            duration: _CustomerConstants.cardAnimationDuration,
+                            transitionBuilder: (Widget child, Animation<double> animation) {
+                              return ScaleTransition(
+                                scale: animation,
+                                child: FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: Text(
+                              provider.isLoading ? '...' : '${_totalCustomers}',
+                              key: ValueKey<int>(_totalCustomers),
+                              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: _CustomerConstants.primaryDark),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      'High points balance ($_totalPointsBalance pts) - Consider promoting redemptions',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: _CustomerConstants.warningOrange,
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withValues(alpha: 0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.money, color: Colors.green, size: 16),
+                              const SizedBox(width: 4),
+                              Text('Total Revenue', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          AnimatedSwitcher(
+                            duration: _CustomerConstants.cardAnimationDuration,
+                            transitionBuilder: (Widget child, Animation<double> animation) {
+                              return ScaleTransition(
+                                scale: animation,
+                                child: FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: Text(
+                              provider.isLoading ? '...' : 'KES ${NumberFormat('#,###').format(_totalRevenue)}',
+                              key: ValueKey<double>(_totalRevenue),
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withValues(alpha: 0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.card_giftcard, color: _CustomerConstants.accentGreen, size: 16),
+                              const SizedBox(width: 4),
+                              Text('Points Balance', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          AnimatedSwitcher(
+                            duration: _CustomerConstants.cardAnimationDuration,
+                            transitionBuilder: (Widget child, Animation<double> animation) {
+                              return ScaleTransition(
+                                scale: animation,
+                                child: FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: Text(
+                              provider.isLoading ? '...' : '$_totalPointsBalance',
+                              key: ValueKey<int>(_totalPointsBalance),
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _CustomerConstants.accentGreen),
+                            ),
+                          ),
+                          // ── Show points change indicator ──
+                          if (_pointsBalanceChanged && !provider.isLoading)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                '${_totalPointsBalance - _previousPointsBalance > 0 ? '+' : ''}${_totalPointsBalance - _previousPointsBalance} pts',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: _totalPointsBalance - _previousPointsBalance > 0 
+                                      ? _CustomerConstants.accentGreen 
+                                      : _CustomerConstants.errorRed,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),
                 ],
               ),
             ),
-          
-          // Error Message
-          if (_errorMessage != null)
-            Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.shade200),
+            
+            // ── Search Bar ──
+            CustomerSearchBar(
+              searchQuery: _searchQuery,
+              onSearchChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                  _applyFilters();
+                });
+              },
+              onClearSearch: () {
+                setState(() {
+                  _searchQuery = '';
+                  _applyFilters();
+                });
+              },
+            ),
+            
+            // ── Warning Banner ──
+            if (_showHighPointsWarning && !provider.isLoading)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _CustomerConstants.warningOrange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _CustomerConstants.warningOrange.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: _CustomerConstants.warningOrange,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'High points balance ($_totalPointsBalance pts) - Consider promoting redemptions',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _CustomerConstants.warningOrange,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+            
+            // ── Error Message ──
+            if (_errorMessage != null)
+              Container(
+                margin: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red.shade700),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(_errorMessage!, style: TextStyle(color: Colors.red.shade700))),
+                    IconButton(
+                      icon: Icon(Icons.close, color: Colors.red.shade700),
+                      onPressed: () => context.read<CustomerProvider>().clearError(),
+                    ),
+                  ],
+                ),
+              ),
+            
+            // ── Results Count ──
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(Icons.error_outline, color: Colors.red.shade700),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(_errorMessage!, style: TextStyle(color: Colors.red.shade700))),
-                  IconButton(
-                    icon: Icon(Icons.close, color: Colors.red.shade700),
-                    onPressed: () => setState(() => _errorMessage = null),
+                  Text(
+                    provider.isLoading ? 'Loading...' : '$_filteredCustomersLength customers found',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                  ),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _selectedTierFilter = null;
+                        _searchQuery = '';
+                        _tabController.index = 0;
+                        _applyFilters();
+                      });
+                    },
+                    icon: const Icon(Icons.clear_all),
+                    label: const Text('Clear Filters'),
                   ),
                 ],
               ),
             ),
-          
-          // Results Count
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '$_filteredCustomersLength customers found',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-                ),
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _selectedTierFilter = null;
-                      _searchQuery = '';
-                      _tabController.index = 0;
-                      _applyFilters();
-                    });
-                  },
-                  icon: const Icon(Icons.clear_all),
-                  label: const Text('Clear Filters'),
-                ),
-              ],
+            
+            // ── Customer List ──
+            Expanded(
+              child: provider.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : provider.filteredCustomers.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.people_outline, size: 72, color: Colors.grey.shade400),
+                              const SizedBox(height: 16),
+                              Text('No customers found', style: TextStyle(fontSize: 18, color: Colors.grey.shade600)),
+                              const SizedBox(height: 8),
+                              Text('Try adjusting your search or filters', style: TextStyle(color: Colors.grey.shade500)),
+                            ],
+                          ),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: _loadData,
+                          color: _CustomerConstants.primaryDark,
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: provider.filteredCustomers.length,
+                            itemBuilder: (context, index) {
+                              final customer = provider.filteredCustomers[index];
+                              return SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0, 0.2),
+                                  end: Offset.zero,
+                                ).animate(
+                                  CurvedAnimation(
+                                    parent: _fadeController,
+                                    curve: Interval(
+                                      (index * 0.05).clamp(0.0, 0.8),
+                                      1.0,
+                                      curve: Curves.easeOut,
+                                    ),
+                                  ),
+                                ),
+                                child: CustomerCard(
+                                  customer: customer,
+                                  onTap: () => _showCustomerDetails(customer),
+                                  canRedeemPoints: _canRedeemPoints,
+                                  onRedeemPoints: () => _showRedemptionDialog(customer),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
             ),
-          ),
-          
-          // Customer List
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _filteredCustomers.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.people_outline, size: 72, color: Colors.grey.shade400),
-                            const SizedBox(height: 16),
-                            Text('No customers found', style: TextStyle(fontSize: 18, color: Colors.grey.shade600)),
-                            const SizedBox(height: 8),
-                            Text('Try adjusting your search or filters', style: TextStyle(color: Colors.grey.shade500)),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _loadData,
-                        color: _CustomerConstants.primaryDark,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _filteredCustomers.length,
-                          itemBuilder: (context, index) {
-                            final customer = _filteredCustomers[index];
-                            return CustomerCard(
-                              customer: customer,
-                              onTap: () => _showCustomerDetails(customer),
-                              canRedeemPoints: _canRedeemPoints,
-                              onRedeemPoints: () => _showRedemptionDialog(customer),
-                            );
-                          },
-                        ),
-                      ),
-          ),
-        ],
+          ],
+        ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addCustomer,
-        icon: const Icon(Icons.person_add),
-        label: const Text('Add Customer'),
-        backgroundColor: _CustomerConstants.primaryDark,
+      floatingActionButton: ScaleTransition(
+        scale: _fabScaleAnimation,
+        child: FloatingActionButton.extended(
+          onPressed: _addCustomer,
+          icon: const Icon(Icons.person_add),
+          label: const Text('Add Customer'),
+          backgroundColor: _CustomerConstants.primaryDark,
+        ),
       ),
     );
   }
