@@ -60,6 +60,10 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
   final bool _canRedeemPoints = true;
   
   // ── Track previous points balance for animation ──
+  // Starts at 0 and is only ever updated via _syncPreviousPointsBalance(),
+  // which uses context.read (safe anywhere) rather than the context.watch
+  // -based _totalPointsBalance getter (build()-only). Never read that
+  // getter from initState or an async callback — see notes below.
   int _previousPointsBalance = 0;
   
   @override
@@ -93,8 +97,12 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
     _fadeController.forward();
     _fabController.forward();
     
-    // Store initial points balance
-    _previousPointsBalance = _totalPointsBalance;
+    // NOTE: previously did `_previousPointsBalance = _totalPointsBalance;`
+    // here. _totalPointsBalance is built on context.watch<CustomerProvider>(),
+    // which is ONLY legal to call during build(). Calling it from
+    // initState() throws ("watch() was called outside of a build method").
+    // Left at 0 here; the real baseline gets set once data actually
+    // loads, in _loadData() below, via the context.read-safe helper.
   }
   
   @override
@@ -105,11 +113,29 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
     super.dispose();
   }
 
+  // Computes the total points balance using context.read (safe to call
+  // from anywhere — initState, async callbacks, wherever) instead of
+  // the context.watch-based _totalPointsBalance getter, which must only
+  // ever be called from build().
+  int _computeTotalPointsBalance() {
+    final provider = context.read<CustomerProvider>();
+    return provider.customers.fold(0, (sum, c) => sum + c.pointsBalance);
+  }
+
+  void _syncPreviousPointsBalance() {
+    _previousPointsBalance = _computeTotalPointsBalance();
+  }
+
   // ── Load Data from Backend ──
   Future<void> _loadData() async {
     final provider = context.read<CustomerProvider>();
     await provider.loadCustomers();
+    if (!mounted) return;
     _applyFilters();
+    // Set the real baseline now that data has actually loaded, so the
+    // "points changed" indicator doesn't spuriously fire on first load
+    // (it would compare a stale 0 against the real total otherwise).
+    _syncPreviousPointsBalance();
   }
 
   // ── Apply Filters ──
@@ -236,6 +262,10 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
   }
 
   // ── Computed Values ──
+  // NOTE: these getters use context.watch and must ONLY be called from
+  // build() (directly or via widgets built during build()). Do not call
+  // them from initState, async callbacks, or anywhere else — use
+  // _computeTotalPointsBalance() (context.read-based) instead.
   int get _totalCustomers => context.watch<CustomerProvider>().customers.length;
   double get _totalRevenue => context.watch<CustomerProvider>().customers.fold(0, (sum, c) => sum + c.totalSpent);
   int get _totalPointsBalance => context.watch<CustomerProvider>().customers.fold(0, (sum, c) => sum + c.pointsBalance);
@@ -254,8 +284,16 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
       final success = await provider.redeemPoints(customer.id, points, notes: notes);
       
       if (success && mounted) {
-        // Update previous points balance for animation
-        _previousPointsBalance = _totalPointsBalance;
+        // provider.redeemPoints() reloads the full customer list
+        // internally on success, which resets the filtered list — keep
+        // the currently active search/tier/tab/sort filters applied
+        // instead of letting it silently revert to "show everyone".
+        _applyFilters();
+
+        // Snapshot the new baseline using the context.read-safe helper
+        // (NOT the context.watch-based _totalPointsBalance getter —
+        // this runs inside an async callback, not build()).
+        _syncPreviousPointsBalance();
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -296,6 +334,11 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
       final success = await provider.createCustomer(result.toJson());
       
       if (success && mounted) {
+        // Same reasoning as _processRedemption above: createCustomer()
+        // reloads the list internally, which resets any active filter —
+        // reapply it so the UI stays consistent with what's selected.
+        _applyFilters();
+
         // Refresh animation
         _fadeController.reset();
         _fadeController.forward();
@@ -537,7 +580,7 @@ class _CustomerInsightScreenState extends State<CustomerInsightScreen>
                               );
                             },
                             child: Text(
-                              provider.isLoading ? '...' : '${_totalCustomers}',
+                              provider.isLoading ? '...' : '$_totalCustomers',
                               key: ValueKey<int>(_totalCustomers),
                               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: _CustomerConstants.primaryDark),
                             ),

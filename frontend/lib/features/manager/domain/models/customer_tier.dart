@@ -63,7 +63,7 @@ extension CustomerTierExtension on CustomerTier {
     }
   }
 
-  Color get backgroundColor => color.withOpacity(0.15);
+  Color get backgroundColor => color.withValues(alpha: 0.15);
 
   int get threshold {
     switch (this) {

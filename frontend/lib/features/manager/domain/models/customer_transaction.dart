@@ -1,3 +1,5 @@
+// lib/features/manager/domain/models/customer_transaction.dart
+
 import 'package:flutter/material.dart';
 
 enum TransactionType {
@@ -88,16 +90,24 @@ class CustomerTransaction {
     'type': type.name,
   };
 
+  // Backend (customerController.js getCustomerTransactions) sends
+  // amount/liters as real JSON numbers via `Number(row.amount)` etc —
+  // NOT strings, unlike the customers-list endpoint. But a JSON number
+  // with no fractional part (e.g. a KES 3500 sale) decodes in Dart as
+  // an `int`, not a `double`. Assigning that directly to a
+  // double-typed field with no cast throws at runtime — it would only
+  // ever show up on whole-number amounts, so easy to miss in testing.
+  // `(json['amount'] as num).toDouble()` safely accepts either.
   factory CustomerTransaction.fromJson(Map<String, dynamic> json) {
     return CustomerTransaction(
-      id: json['id'],
-      customerId: json['customerId'],
-      amount: json['amount'],
-      liters: json['liters'],
-      date: DateTime.parse(json['date']),
-      pumpId: json['pumpId'],
-      attendantName: json['attendantName'],
-      pointsEarned: json['pointsEarned'],
+      id: json['id'].toString(),
+      customerId: json['customerId'].toString(),
+      amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+      liters: (json['liters'] as num?)?.toDouble() ?? 0.0,
+      date: DateTime.parse(json['date'].toString()),
+      pumpId: (json['pumpId'] ?? '').toString(),
+      attendantName: (json['attendantName'] ?? 'Unknown').toString(),
+      pointsEarned: (json['pointsEarned'] as num?)?.toInt() ?? 0,
       type: TransactionType.values.firstWhere(
         (e) => e.name == json['type'],
         orElse: () => TransactionType.fuelPurchase,
