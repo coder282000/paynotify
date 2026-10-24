@@ -1,3 +1,4 @@
+// lib/features/attendant/presentation/screens/pump_selection_screen.dart
 import 'package:flutter/material.dart';
 import 'package:paynotify/core/services/pump_service.dart';
 import 'attendant_dashboard.dart';
@@ -13,6 +14,11 @@ class PumpSelectionScreen extends StatefulWidget {
 }
 
 class _PumpSelectionScreenState extends State<PumpSelectionScreen> {
+  // ─────────────────────────────────────────────
+  // DEPENDENCY INJECTION
+  // ─────────────────────────────────────────────
+  final PumpService _pumpService = PumpService();
+
   List<Pump> _pumps = [];
   String? _selectedPump;
   bool _isLoading = true;
@@ -32,7 +38,8 @@ class _PumpSelectionScreenState extends State<PumpSelectionScreen> {
     });
 
     try {
-      final pumpsData = await PumpService.getPumps();
+      // ✅ Use instance method instead of static
+      final pumpsData = await _pumpService.getPumps();
 
       final List<Pump> loadedPumps = pumpsData
           .map((json) => Pump.fromJson(json))
@@ -108,7 +115,7 @@ class _PumpSelectionScreenState extends State<PumpSelectionScreen> {
       ),
     );
 
-    if (shouldPop == true) {
+    if (shouldPop == true && mounted) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -142,8 +149,13 @@ class _PumpSelectionScreenState extends State<PumpSelectionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _onWillPop,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (!didPop) {
+          await _onWillPop();
+        }
+      },
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Select Pump'),

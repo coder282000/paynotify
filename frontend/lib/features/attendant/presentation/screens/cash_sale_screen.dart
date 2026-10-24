@@ -1,3 +1,4 @@
+// lib/features/attendant/presentation/screens/cash_sale_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:paynotify/core/services/transaction_service.dart';
@@ -19,6 +20,11 @@ class CashSaleScreen extends StatefulWidget {
 }
 
 class _CashSaleScreenState extends State<CashSaleScreen> {
+  // ─────────────────────────────────────────────
+  // DEPENDENCY INJECTION
+  // ─────────────────────────────────────────────
+  final TransactionService _transactionService = TransactionService();
+
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _customerNameController = TextEditingController();
@@ -110,8 +116,8 @@ class _CashSaleScreenState extends State<CashSaleScreen> {
     });
     
     try {
-      // 🔥 CALL THE BACKEND API
-      final result = await TransactionService.recordCashSale(
+      // ✅ Use instance method instead of static
+      final result = await _transactionService.recordCashSale(
         pumpId: _getPumpId(),
         amount: amount,
         customerName: customerName.isNotEmpty ? customerName : null,

@@ -1,3 +1,4 @@
+// lib/features/attendant/presentation/screens/receipt_history_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:paynotify/core/services/transaction_service.dart';
@@ -17,6 +18,11 @@ class ReceiptHistoryScreen extends StatefulWidget {
 }
 
 class _ReceiptHistoryScreenState extends State<ReceiptHistoryScreen> {
+  // ─────────────────────────────────────────────
+  // DEPENDENCY INJECTION
+  // ─────────────────────────────────────────────
+  final TransactionService _transactionService = TransactionService();
+
   List<Map<String, dynamic>> _allTransactions = [];
   bool _isLoading = true;
   String? _errorMessage;
@@ -30,6 +36,12 @@ class _ReceiptHistoryScreenState extends State<ReceiptHistoryScreen> {
   void initState() {
     super.initState();
     _loadTransactions();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   // Helper method to safely convert amount to double
@@ -49,13 +61,18 @@ class _ReceiptHistoryScreenState extends State<ReceiptHistoryScreen> {
   }
 
   Future<void> _loadTransactions() async {
+    if (!mounted) return;
+    
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
 
     try {
-      final transactions = await TransactionService.getTransactions();
+      // ✅ Use instance method instead of static
+      final transactions = await _transactionService.getTransactions();
+      
+      if (!mounted) return;
       
       // Convert backend data to the format expected by the UI
       final List<Map<String, dynamic>> formattedTransactions = transactions.map((tx) {
@@ -87,10 +104,12 @@ class _ReceiptHistoryScreenState extends State<ReceiptHistoryScreen> {
       debugPrint('✅ Loaded ${_allTransactions.length} transactions from backend');
     } catch (e) {
       debugPrint('❌ Error loading transactions: $e');
-      setState(() {
-        _errorMessage = 'Failed to load transactions: $e';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to load transactions: $e';
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -174,7 +193,9 @@ class _ReceiptHistoryScreenState extends State<ReceiptHistoryScreen> {
                             _selectedFilter = status;
                           });
                           Navigator.pop(context);
-                          this.setState(() {}); // Refresh main screen
+                          if (mounted) {
+                            this.setState(() {}); // Refresh main screen
+                          }
                         },
                       );
                     }).toList(),
@@ -201,7 +222,9 @@ class _ReceiptHistoryScreenState extends State<ReceiptHistoryScreen> {
                                 _selectedDate = date;
                               });
                               Navigator.pop(context);
-                              this.setState(() {}); // Refresh main screen
+                              if (mounted) {
+                                this.setState(() {}); // Refresh main screen
+                              }
                             }
                           },
                           icon: const Icon(Icons.calendar_today, size: 16),
@@ -220,7 +243,9 @@ class _ReceiptHistoryScreenState extends State<ReceiptHistoryScreen> {
                               _selectedDate = null;
                             });
                             Navigator.pop(context);
-                            this.setState(() {});
+                            if (mounted) {
+                              this.setState(() {});
+                            }
                           },
                           icon: const Icon(Icons.clear),
                         ),
@@ -238,7 +263,9 @@ class _ReceiptHistoryScreenState extends State<ReceiptHistoryScreen> {
                         _selectedDate = null;
                       });
                       Navigator.pop(context);
-                      this.setState(() {});
+                      if (mounted) {
+                        this.setState(() {});
+                      }
                     },
                     child: const Text('Clear All Filters'),
                   ),

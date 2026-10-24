@@ -7,20 +7,22 @@ import '../models/station_activity_model.dart';
 import '../models/business_overview_model.dart';
 
 class StationRepository {
-  // Singleton pattern
-  static final StationRepository _instance = StationRepository._internal();
-  static StationRepository get instance => _instance;
-  factory StationRepository() => _instance;
-  StationRepository._internal();
+  // ─────────────────────────────────────────────
+  // DEPENDENCY INJECTION
+  // ─────────────────────────────────────────────
+  final ApiService _apiService;
 
-  // ============================================================
+  StationRepository({ApiService? apiService})
+      : _apiService = apiService ?? ApiService();
+
+  // ─────────────────────────────────────────────
   // STATION APIs
-  // ============================================================
+  // ─────────────────────────────────────────────
 
   /// Get all stations for the owner
   Future<List<Station>> getStations() async {
     try {
-      final response = await ApiService.get('/stations');
+      final response = await _apiService.get('/stations');
       if (response['success'] == true) {
         return (response['data'] as List)
             .map((json) => Station.fromJson(json))
@@ -36,7 +38,7 @@ class StationRepository {
   /// Get station by ID
   Future<Station?> getStationById(int stationId) async {
     try {
-      final response = await ApiService.get('/stations/$stationId');
+      final response = await _apiService.get('/stations/$stationId');
       if (response['success'] == true) {
         return Station.fromJson(response['data']);
       }
@@ -50,7 +52,7 @@ class StationRepository {
   /// Create new station
   Future<Station?> createStation(Map<String, dynamic> stationData) async {
     try {
-      final response = await ApiService.post('/stations', stationData);
+      final response = await _apiService.post('/stations', stationData);
       if (response['success'] == true) {
         return Station.fromJson(response['data']);
       }
@@ -64,7 +66,7 @@ class StationRepository {
   /// Update station
   Future<bool> updateStation(int stationId, Map<String, dynamic> stationData) async {
     try {
-      final response = await ApiService.put('/stations/$stationId', stationData);
+      final response = await _apiService.put('/stations/$stationId', stationData);
       return response['success'] == true;
     } catch (e) {
       debugPrint('❌ Update station error: $e');
@@ -75,7 +77,7 @@ class StationRepository {
   /// Delete station (deactivate)
   Future<bool> deleteStation(int stationId) async {
     try {
-      final response = await ApiService.delete('/stations/$stationId');
+      final response = await _apiService.delete('/stations/$stationId');
       return response['success'] == true;
     } catch (e) {
       debugPrint('❌ Delete station error: $e');
@@ -83,14 +85,14 @@ class StationRepository {
     }
   }
 
-  // ============================================================
+  // ─────────────────────────────────────────────
   // SUMMARY APIs
-  // ============================================================
+  // ─────────────────────────────────────────────
 
   /// Get summary for all stations
   Future<List<StationSummary>> getAllStationsSummary() async {
     try {
-      final response = await ApiService.get('/stations/summary/all');
+      final response = await _apiService.get('/stations/summary/all');
       if (response['success'] == true) {
         return (response['data'] as List)
             .map((json) => StationSummary.fromJson(json))
@@ -106,7 +108,7 @@ class StationRepository {
   /// Get summary for a specific station
   Future<StationSummary?> getStationSummary(int stationId) async {
     try {
-      final response = await ApiService.get('/stations/$stationId/summary');
+      final response = await _apiService.get('/stations/$stationId/summary');
       if (response['success'] == true) {
         return StationSummary.fromJson(response['data']);
       }
@@ -120,7 +122,7 @@ class StationRepository {
   /// Get business overview (all stations combined)
   Future<BusinessOverview?> getBusinessOverview() async {
     try {
-      final response = await ApiService.get('/stations/business/overview');
+      final response = await _apiService.get('/stations/business/overview');
       if (response['success'] == true) {
         return BusinessOverview.fromJson(response['data']);
       }
@@ -131,14 +133,14 @@ class StationRepository {
     }
   }
 
-  // ============================================================
+  // ─────────────────────────────────────────────
   // ACTIVITY APIs
-  // ============================================================
+  // ─────────────────────────────────────────────
 
   /// Get recent activities across all stations
   Future<List<StationActivity>> getRecentActivities({int limit = 20}) async {
     try {
-      final response = await ApiService.get('/stations/activities?limit=$limit');
+      final response = await _apiService.get('/stations/activities?limit=$limit');
       if (response['success'] == true) {
         return (response['data'] as List)
             .map((json) => StationActivity.fromJson(json))
@@ -154,7 +156,7 @@ class StationRepository {
   /// Get activities for a specific station
   Future<List<StationActivity>> getStationActivities(int stationId, {int limit = 20}) async {
     try {
-      final response = await ApiService.get('/stations/$stationId/activities?limit=$limit');
+      final response = await _apiService.get('/stations/$stationId/activities?limit=$limit');
       if (response['success'] == true) {
         return (response['data'] as List)
             .map((json) => StationActivity.fromJson(json))
@@ -167,14 +169,14 @@ class StationRepository {
     }
   }
 
-  // ============================================================
+  // ─────────────────────────────────────────────
   // PERFORMANCE APIs
-  // ============================================================
+  // ─────────────────────────────────────────────
 
   /// Get performance data for chart
   Future<Map<String, dynamic>> getPerformanceData(int stationId, String timeRange) async {
     try {
-      final response = await ApiService.get('/stations/$stationId/performance?range=$timeRange');
+      final response = await _apiService.get('/stations/$stationId/performance?range=$timeRange');
       return response['data'] ?? {};
     } catch (e) {
       debugPrint('❌ Get performance data error: $e');
@@ -185,7 +187,7 @@ class StationRepository {
   /// Get station ranking across all stations
   Future<Map<String, dynamic>> getStationRanking() async {
     try {
-      final response = await ApiService.get('/stations/ranking');
+      final response = await _apiService.get('/stations/ranking');
       return response['data'] ?? {};
     } catch (e) {
       debugPrint('❌ Get station ranking error: $e');
@@ -193,14 +195,14 @@ class StationRepository {
     }
   }
 
-  // ============================================================
+  // ─────────────────────────────────────────────
   // USER-STATION ASSIGNMENT APIs
-  // ============================================================
+  // ─────────────────────────────────────────────
 
   /// Assign user to station
   Future<bool> assignUserToStation(int stationId, int userId, String role) async {
     try {
-      final response = await ApiService.post('/stations/$stationId/users', {
+      final response = await _apiService.post('/stations/$stationId/users', {
         'user_id': userId,
         'role': role,
       });
@@ -214,7 +216,7 @@ class StationRepository {
   /// Remove user from station
   Future<bool> removeUserFromStation(int stationId, int userId) async {
     try {
-      final response = await ApiService.delete('/stations/$stationId/users/$userId');
+      final response = await _apiService.delete('/stations/$stationId/users/$userId');
       return response['success'] == true;
     } catch (e) {
       debugPrint('❌ Remove user from station error: $e');
@@ -225,7 +227,7 @@ class StationRepository {
   /// Get users assigned to station
   Future<List<Map<String, dynamic>>> getStationUsers(int stationId) async {
     try {
-      final response = await ApiService.get('/stations/$stationId/users');
+      final response = await _apiService.get('/stations/$stationId/users');
       if (response['success'] == true) {
         return List<Map<String, dynamic>>.from(response['data']);
       }
@@ -234,5 +236,13 @@ class StationRepository {
       debugPrint('❌ Get station users error: $e');
       return [];
     }
+  }
+
+  // ─────────────────────────────────────────────
+  // DISPOSE
+  // ─────────────────────────────────────────────
+
+  void dispose() {
+    // Clean up resources if needed
   }
 }

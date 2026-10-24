@@ -4,13 +4,21 @@ import 'api_service.dart';
 
 class StationService {
   // ─────────────────────────────────────────────
+  // DEPENDENCY INJECTION
+  // ─────────────────────────────────────────────
+  final ApiService _apiService;
+
+  StationService({ApiService? apiService})
+      : _apiService = apiService ?? ApiService();
+
+  // ─────────────────────────────────────────────
   // GET ALL STATIONS
   // ─────────────────────────────────────────────
 
   /// Calls GET /api/stations
   /// Backend returns { success, data: [...] }
-  static Future<Map<String, dynamic>> getStations() async {
-    final response = await ApiService.get('/stations');
+  Future<Map<String, dynamic>> getStations() async {
+    final response = await _apiService.get('/stations');
 
     if (response['success'] == true) {
       // Backend returns 'data' not 'stations'
@@ -31,8 +39,8 @@ class StationService {
 
   /// Calls GET /api/stations/:id
   /// Backend returns { success, data: {...} }
-  static Future<Map<String, dynamic>> getStation(int stationId) async {
-    final response = await ApiService.get('/stations/$stationId');
+  Future<Map<String, dynamic>> getStation(int stationId) async {
+    final response = await _apiService.get('/stations/$stationId');
 
     if (response['success'] == true) {
       final station = response['data'];
@@ -62,7 +70,7 @@ class StationService {
   ///   manager_id    — optional, integer
   ///   paybill_number— optional
   ///   till_number   — optional
-  static Future<Map<String, dynamic>> createStation(
+  Future<Map<String, dynamic>> createStation(
     Map<String, dynamic> formData,
   ) async {
     // Map Flutter field names → backend snake_case field names
@@ -96,7 +104,7 @@ class StationService {
 
     debugPrint('Creating station with payload: $payload');
 
-    final response = await ApiService.post('/stations', payload);
+    final response = await _apiService.post('/stations', payload);
 
     if (response['success'] == true) {
       final station = response['data'];
@@ -121,7 +129,7 @@ class StationService {
   // ─────────────────────────────────────────────
 
   /// Calls PUT /api/stations/:id
-  static Future<Map<String, dynamic>> updateStation(
+  Future<Map<String, dynamic>> updateStation(
     int stationId,
     Map<String, dynamic> formData,
   ) async {
@@ -149,7 +157,7 @@ class StationService {
 
     debugPrint('Updating station $stationId with payload: $payload');
 
-    final response = await ApiService.put('/stations/$stationId', payload);
+    final response = await _apiService.put('/stations/$stationId', payload);
 
     if (response['success'] == true) {
       final station = response['data'];
@@ -175,7 +183,7 @@ class StationService {
   /// Calls GET /api/stations/:id/summary
   /// Optional query params: start_date, end_date (YYYY-MM-DD)
   /// If not provided, backend defaults to today
-  static Future<Map<String, dynamic>> getStationSummary(
+  Future<Map<String, dynamic>> getStationSummary(
     int stationId, {
     String period = 'today',
   }) async {
@@ -203,7 +211,7 @@ class StationService {
     final endpoint =
         '/stations/$stationId/summary?start_date=$startDate&end_date=$endDate';
 
-    final response = await ApiService.get(endpoint);
+    final response = await _apiService.get(endpoint);
 
     if (response['success'] == true) {
       // Backend returns { success, data: { totalTransactions, totalSales, ... } }
@@ -226,10 +234,10 @@ class StationService {
   // ─────────────────────────────────────────────
 
   /// Calls GET /api/stations/:id/performance
-  static Future<Map<String, dynamic>> getStationPerformance(
+  Future<Map<String, dynamic>> getStationPerformance(
     int stationId,
   ) async {
-    final response = await ApiService.get('/stations/$stationId/performance');
+    final response = await _apiService.get('/stations/$stationId/performance');
 
     if (response['success'] == true) {
       return {'success': true, 'performance': response['data']};
@@ -246,7 +254,7 @@ class StationService {
   // ─────────────────────────────────────────────
 
   /// Fetches summary for every station ID in the list
-  static Future<Map<String, dynamic>> getAllStationsSummaries(
+  Future<Map<String, dynamic>> getAllStationsSummaries(
     List<int> stationIds, {
     String period = 'today',
   }) async {
@@ -272,10 +280,20 @@ class StationService {
   }
 
   // ─────────────────────────────────────────────
+  // DISPOSE
+  // ─────────────────────────────────────────────
+
+  /// Clean up resources if needed
+  void dispose() {
+    // If ApiService has resources to clean up, call them here
+    // _apiService.dispose();
+  }
+
+  // ─────────────────────────────────────────────
   // HELPERS
   // ─────────────────────────────────────────────
 
-  static String _formatDate(DateTime date) {
+  String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 }

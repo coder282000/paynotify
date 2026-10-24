@@ -1,3 +1,4 @@
+// lib/features/attendant/presentation/screens/pdq_payment_screen.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:paynotify/core/services/transaction_service.dart';
@@ -17,6 +18,11 @@ class PdqPaymentScreen extends StatefulWidget {
 }
 
 class _PdqPaymentScreenState extends State<PdqPaymentScreen> {
+  // ─────────────────────────────────────────────
+  // DEPENDENCY INJECTION
+  // ─────────────────────────────────────────────
+  final TransactionService _transactionService = TransactionService();
+
   final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController();
   final _cardNumberController = TextEditingController();
@@ -111,8 +117,8 @@ class _PdqPaymentScreenState extends State<PdqPaymentScreen> {
     setState(() => _isProcessing = true);
 
     try {
-      // 🔥 CALL BACKEND API TO RECORD CARD SALE
-      final result = await TransactionService.recordCardSale(
+      // ✅ Use instance method instead of static
+      final result = await _transactionService.recordCardSale(
         pumpId: _getPumpId(),
         amount: amount,
         customerName: _cardHolderController.text.isNotEmpty 
@@ -451,7 +457,7 @@ class _PdqPaymentScreenState extends State<PdqPaymentScreen> {
                             // Card Number
                             TextFormField(
                               controller: _cardNumberController,
-                             keyboardType: TextInputType.number,
+                              keyboardType: TextInputType.number,
                               decoration: InputDecoration(
                                 labelText: 'Card Number',
                                 prefixIcon: const Icon(Icons.credit_card),

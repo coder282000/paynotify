@@ -2,7 +2,6 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
-
 import 'package:paynotify/core/services/api_service.dart';
 
 class RegistrationScreen extends StatefulWidget {
@@ -15,6 +14,11 @@ class RegistrationScreen extends StatefulWidget {
 }
 
 class _RegistrationScreenState extends State<RegistrationScreen> {
+  // ─────────────────────────────────────────────
+  // DEPENDENCY INJECTION
+  // ─────────────────────────────────────────────
+  final ApiService _apiService = ApiService();
+
   // ── Controllers ──────────────────────────────────────────────────────────────
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
@@ -48,10 +52,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   // ── Validate Invitation ──────────────────────────────────────────────────────
 
   Future<void> _validateInvitation() async {
+    if (!mounted) return;
+    
     setState(() => _isLoading = true);
 
     try {
-      final response = await ApiService.getPublic('/public/invite/${widget.token}'); // ✅ FIXED
+      // ✅ Use instance method instead of static
+      final response = await _apiService.getPublic('/public/invite/${widget.token}');
+
+      if (!mounted) return;
 
       if (response['success'] == true) {
         setState(() {
@@ -66,10 +75,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         });
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Failed to validate invitation. Please try again.';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to validate invitation. Please try again.';
+          _isLoading = false;
+        });
+      }
       debugPrint('Validate invitation error: $e');
     }
   }
@@ -85,12 +96,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     });
 
     try {
-      final response = await ApiService.postPublic('/public/register', { // ✅ FIXED
+      // ✅ Use instance method instead of static
+      final response = await _apiService.postPublic('/public/register', {
         'token': widget.token,
         'username': _usernameController.text.trim(),
         'password': _passwordController.text,
         'confirm_password': _confirmPasswordController.text,
       });
+
+      if (!mounted) return;
 
       if (response['success'] == true) {
         // Show success and redirect to login
@@ -102,10 +116,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         });
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Connection error. Please check your internet.';
-        _isSubmitting = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Connection error. Please check your internet.';
+          _isSubmitting = false;
+        });
+      }
       debugPrint('Registration error: $e');
     }
   }
@@ -167,7 +183,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              Navigator.pushReplacementNamed(context, '/login');
+              if (mounted) {
+                Navigator.pushReplacementNamed(context, '/login');
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0B3D2E),
@@ -238,7 +256,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () {
-                Navigator.pushReplacementNamed(context, '/login');
+                if (mounted) {
+                  Navigator.pushReplacementNamed(context, '/login');
+                }
               },
               icon: const Icon(Icons.login),
               label: const Text('Go to Login'),

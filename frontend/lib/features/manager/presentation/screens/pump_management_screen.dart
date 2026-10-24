@@ -322,13 +322,15 @@ class _PumpManagementScreenState extends State<PumpManagementScreen>
           }).toList();
         });
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${type.displayName} price updated to KES ${newPrice.toStringAsFixed(2)}'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${type.displayName} price updated to KES ${newPrice.toStringAsFixed(2)}'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
       
     } catch (e) {
@@ -652,13 +654,15 @@ class _PumpManagementScreenState extends State<PumpManagementScreen>
               );
             });
             
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Price change scheduled for ${DateFormat('dd MMM yyyy').format(date)}'),
-                backgroundColor: Colors.orange,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Price change scheduled for ${DateFormat('dd MMM yyyy').format(date)}'),
+                  backgroundColor: Colors.orange,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
           }
         },
       ),
@@ -748,13 +752,15 @@ class _PumpManagementScreenState extends State<PumpManagementScreen>
                 });
                 Navigator.pop(context);
                 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Scheduled change cancelled'),
-                    backgroundColor: Colors.red,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Scheduled change cancelled'),
+                      backgroundColor: Colors.red,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
               }
             },
             child: const Text('Yes, Cancel'),
@@ -781,14 +787,16 @@ class _PumpManagementScreenState extends State<PumpManagementScreen>
             
             if (success && mounted) {
               await _loadPumpData();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('${newPump.number} added successfully'),
-                  backgroundColor: Colors.green,
-                  behavior: SnackBarBehavior.floating,
-                  duration: const Duration(seconds: 2),
-                ),
-              );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('${newPump.number} added successfully'),
+                    backgroundColor: Colors.green,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
             }
           } catch (e) {
             if (mounted) {
@@ -846,13 +854,15 @@ class _PumpManagementScreenState extends State<PumpManagementScreen>
         
         await _loadPumpData();
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${updatedPump.number} updated successfully'),
-            backgroundColor: Colors.green,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${updatedPump.number} updated successfully'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -900,13 +910,15 @@ class _PumpManagementScreenState extends State<PumpManagementScreen>
           final success = await provider.deletePump(pumpId);
           if (success) {
             await _loadPumpData();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('${pump.number} deactivated successfully'),
-                backgroundColor: Colors.green,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${pump.number} deactivated successfully'),
+                  backgroundColor: Colors.green,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
           }
         }
       } catch (e) {
@@ -1824,12 +1836,14 @@ class _PumpManagementScreenState extends State<PumpManagementScreen>
                       child: ElevatedButton.icon(
                         onPressed: () {
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Reports coming soon'),
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Reports coming soon'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
                         },
                         icon: const Icon(Icons.bar_chart_outlined),
                         label: const Text('View Reports'),

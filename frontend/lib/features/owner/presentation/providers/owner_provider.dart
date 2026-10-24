@@ -5,13 +5,29 @@ import '../../domain/models/station_model.dart';
 import '../../domain/models/station_summary_model.dart';
 import '../../domain/models/business_overview_model.dart';
 import '../../domain/models/employee_model.dart';
-import '../../domain/models/expense_model.dart';
+import '../../domain/models/expense_model.dart'; // ✅ Correct import
 import '../../domain/models/subscription_model.dart';
 import '../../domain/models/fuel_inventory.dart';
 import 'package:paynotify/core/services/station_service.dart';
 import 'package:paynotify/core/services/employee_service.dart';
+import 'package:paynotify/core/services/api_service.dart';
 
 class OwnerProvider extends ChangeNotifier {
+  // ─────────────────────────────────────────────
+  // DEPENDENCY INJECTION
+  // ─────────────────────────────────────────────
+  final StationService _stationService;
+  final EmployeeService _employeeService;
+  final ApiService _apiService;
+
+  OwnerProvider({
+    StationService? stationService,
+    EmployeeService? employeeService,
+    ApiService? apiService,
+  })  : _stationService = stationService ?? StationService(),
+        _employeeService = employeeService ?? EmployeeService(),
+        _apiService = apiService ?? ApiService();
+
   // ─────────────────────────────────────────────
   // DATA
   // ─────────────────────────────────────────────
@@ -21,7 +37,7 @@ class OwnerProvider extends ChangeNotifier {
   Station? _selectedStation;
   BusinessOverview? _businessOverview;
   List<OwnerEmployee> _employees = [];
-  List<OwnerExpense> _expenses = [];
+  List<Expense> _expenses = []; // ✅ Changed from OwnerExpense to Expense
   List<Subscription> _subscriptions = [];
   List<FuelInventory> _fuelInventory = [];
 
@@ -31,10 +47,11 @@ class OwnerProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isRefreshing = false;
   bool _isLoadingFuelInventory = false;
+  bool _isSubmitting = false;
   String? _errorMessage;
   String _selectedTimeRange = 'Today';
 
-  // Debounce timer to prevent rapid successive notifyListeners calls
+  // Debounce timer
   Timer? _notifyTimer;
 
   // ─────────────────────────────────────────────
@@ -46,16 +63,17 @@ class OwnerProvider extends ChangeNotifier {
   Station? get selectedStation => _selectedStation;
   BusinessOverview? get businessOverview => _businessOverview;
   List<OwnerEmployee> get employees => _employees;
-  List<OwnerExpense> get expenses => _expenses;
+  List<Expense> get expenses => _expenses; // ✅ Changed from OwnerExpense to Expense
   List<Subscription> get subscriptions => _subscriptions;
   List<FuelInventory> get fuelInventory => _fuelInventory;
   bool get isLoading => _isLoading;
   bool get isRefreshing => _isRefreshing;
   bool get isLoadingFuelInventory => _isLoadingFuelInventory;
+  bool get isSubmitting => _isSubmitting;
   String? get errorMessage => _errorMessage;
   String get selectedTimeRange => _selectedTimeRange;
 
-  // Computed totals from real station summaries
+  // Computed totals
   double get totalTodaySales =>
       _stationSummaries.fold(0.0, (sum, s) => sum + s.todaySales);
   double get totalMonthlySales =>
@@ -68,7 +86,7 @@ class OwnerProvider extends ChangeNotifier {
       _stationSummaries.fold(0, (sum, s) => sum + s.todayTransactions);
 
   // ─────────────────────────────────────────────
-  // SAFE NOTIFY (debounced)
+  // SAFE NOTIFY
   // ─────────────────────────────────────────────
   @override
   void notifyListeners() {
@@ -81,6 +99,8 @@ class OwnerProvider extends ChangeNotifier {
   @override
   void dispose() {
     _notifyTimer?.cancel();
+    _stationService.dispose();
+    _employeeService.dispose();
     super.dispose();
   }
 
@@ -88,14 +108,13 @@ class OwnerProvider extends ChangeNotifier {
   // STATION MANAGEMENT
   // ============================================================
 
-  /// Loads all stations from GET /api/stations
   Future<void> loadStations() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final result = await StationService.getStations();
+      final result = await _stationService.getStations();
 
       if (result['success'] == true) {
         final rawList = result['stations'] as List<Map<String, dynamic>>;
@@ -114,14 +133,13 @@ class OwnerProvider extends ChangeNotifier {
     }
   }
 
-  /// Creates a new station via POST /api/stations
   Future<bool> createStation(Map<String, dynamic> stationData) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final result = await StationService.createStation(stationData);
+      final result = await _stationService.createStation(stationData);
 
       if (result['success'] == true) {
         await loadStations();
@@ -144,7 +162,6 @@ class OwnerProvider extends ChangeNotifier {
     }
   }
 
-  /// Updates a station via PUT /api/stations/:id
   Future<bool> updateStation(
     int stationId,
     Map<String, dynamic> stationData,
@@ -154,7 +171,7 @@ class OwnerProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await StationService.updateStation(stationId, stationData);
+      final result = await _stationService.updateStation(stationId, stationData);
 
       if (result['success'] == true) {
         await loadStations();
@@ -181,7 +198,6 @@ class OwnerProvider extends ChangeNotifier {
   // SUMMARY MANAGEMENT
   // ============================================================
 
-  /// Loads summaries for all stations and builds the BusinessOverview
   Future<void> loadAllStationsSummary() async {
     _isLoading = true;
     _errorMessage = null;
@@ -197,7 +213,7 @@ class OwnerProvider extends ChangeNotifier {
       }
 
       final stationIds = _stations.map((s) => s.id).toList();
-      final result = await StationService.getAllStationsSummaries(
+      final result = await _stationService.getAllStationsSummaries(
         stationIds,
         period: _selectedTimeRange.toLowerCase(),
       );
@@ -223,14 +239,13 @@ class OwnerProvider extends ChangeNotifier {
     }
   }
 
-  /// Loads summary for a single station (used on StationDetailsScreen)
   Future<void> loadStationSummary(int stationId) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final result = await StationService.getStationSummary(stationId);
+      final result = await _stationService.getStationSummary(stationId);
 
       if (result['success'] == true) {
         _selectedStationSummary =
@@ -260,7 +275,7 @@ class OwnerProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await EmployeeService.getEmployees();
+      final result = await _employeeService.getEmployees();
 
       if (result['success'] == true) {
         final rawList = result['data'] as List?;
@@ -319,7 +334,7 @@ class OwnerProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await EmployeeService.inviteEmployee({
+      final result = await _employeeService.inviteEmployee({
         'email': email,
         'full_name': fullName,
         'role': role,
@@ -353,7 +368,7 @@ class OwnerProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await EmployeeService.approveEmployee(
+      final result = await _employeeService.approveEmployee(
         int.parse(userId),
         approved,
         notes: notes,
@@ -382,7 +397,7 @@ class OwnerProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await EmployeeService.resendInvitation({
+      final result = await _employeeService.resendInvitation({
         'email': email,
         'full_name': fullName,
         'role': role,
@@ -407,7 +422,7 @@ class OwnerProvider extends ChangeNotifier {
   /// Get pending employee registrations
   Future<List<Map<String, dynamic>>> getPendingRegistrations() async {
     try {
-      final result = await EmployeeService.getPendingRegistrations();
+      final result = await _employeeService.getPendingRegistrations();
       if (result['success'] == true) {
         return result['data'] as List<Map<String, dynamic>>;
       }
@@ -419,24 +434,139 @@ class OwnerProvider extends ChangeNotifier {
   }
 
   // ============================================================
-  // EXPENSE MANAGEMENT  (stubs — connect when endpoint is ready)
+  // EXPENSE MANAGEMENT
   // ============================================================
 
   Future<void> loadExpenses() async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 300));
-    _expenses = [];
-    _isLoading = false;
-    notifyListeners();
+
+    try {
+      final response = await _apiService.get('/manager/expenses');
+
+      if (response['success'] == true) {
+        final data = response['data'];
+        final expensesList = data['expenses'] as List? ?? [];
+        
+        // ✅ Changed from OwnerExpense to Expense
+        _expenses = expensesList.map((json) => Expense.fromJson(json)).toList();
+        debugPrint('✅ Loaded ${_expenses.length} expenses');
+      } else {
+        _errorMessage = response['message'] ?? 'Failed to load expenses';
+        debugPrint('❌ loadExpenses error: ${response['message']}');
+      }
+    } catch (e) {
+      _errorMessage = 'Failed to load expenses: $e';
+      debugPrint('❌ loadExpenses exception: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<bool> createExpense(Map<String, dynamic> expenseData) async {
-    return false;
+    _isSubmitting = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await _apiService.post('/manager/expenses', expenseData);
+
+      if (response['success'] == true) {
+        // ✅ Changed from OwnerExpense to Expense
+        final newExpense = Expense.fromJson(response['data'] as Map<String, dynamic>);
+        _expenses.insert(0, newExpense);
+        
+        _isSubmitting = false;
+        notifyListeners();
+        debugPrint('✅ Expense created successfully: ${newExpense.id}');
+        return true;
+      } else {
+        _errorMessage = response['message'] ?? 'Failed to create expense';
+        _isSubmitting = false;
+        notifyListeners();
+        debugPrint('❌ createExpense error: ${response['message']}');
+        return false;
+      }
+    } catch (e) {
+      _errorMessage = 'Failed to create expense: $e';
+      _isSubmitting = false;
+      notifyListeners();
+      debugPrint('❌ createExpense exception: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateExpense(String id, Map<String, dynamic> expenseData) async {
+    _isSubmitting = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await _apiService.put('/manager/expenses/$id', expenseData);
+
+      if (response['success'] == true) {
+        // ✅ Changed from OwnerExpense to Expense
+        final updatedExpense = Expense.fromJson(response['data'] as Map<String, dynamic>);
+        final index = _expenses.indexWhere((e) => e.id == id);
+        if (index != -1) {
+          _expenses[index] = updatedExpense;
+        }
+        
+        _isSubmitting = false;
+        notifyListeners();
+        debugPrint('✅ Expense updated successfully: $id');
+        return true;
+      } else {
+        _errorMessage = response['message'] ?? 'Failed to update expense';
+        _isSubmitting = false;
+        notifyListeners();
+        debugPrint('❌ updateExpense error: ${response['message']}');
+        return false;
+      }
+    } catch (e) {
+      _errorMessage = 'Failed to update expense: $e';
+      _isSubmitting = false;
+      notifyListeners();
+      debugPrint('❌ updateExpense exception: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteExpense(String id) async {
+    _isSubmitting = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await _apiService.delete('/manager/expenses/$id');
+
+      if (response['success'] == true) {
+        _expenses.removeWhere((e) => e.id == id);
+        
+        _isSubmitting = false;
+        notifyListeners();
+        debugPrint('✅ Expense deleted successfully: $id');
+        return true;
+      } else {
+        _errorMessage = response['message'] ?? 'Failed to delete expense';
+        _isSubmitting = false;
+        notifyListeners();
+        debugPrint('❌ deleteExpense error: ${response['message']}');
+        return false;
+      }
+    } catch (e) {
+      _errorMessage = 'Failed to delete expense: $e';
+      _isSubmitting = false;
+      notifyListeners();
+      debugPrint('❌ deleteExpense exception: $e');
+      return false;
+    }
   }
 
   // ============================================================
-  // FUEL INVENTORY  (stubs — connect when endpoint is ready)
+  // FUEL INVENTORY (stubs)
   // ============================================================
 
   Future<void> loadFuelInventory() async {
@@ -458,7 +588,7 @@ class OwnerProvider extends ChangeNotifier {
   }
 
   // ============================================================
-  // SUBSCRIPTION MANAGEMENT  (stubs)
+  // SUBSCRIPTION MANAGEMENT (stubs)
   // ============================================================
 
   Future<void> loadSubscriptions() async {
@@ -488,6 +618,7 @@ class OwnerProvider extends ChangeNotifier {
     await loadStations();
     await loadAllStationsSummary();
     await loadEmployees();
+    await loadExpenses();
 
     _isRefreshing = false;
     notifyListeners();
@@ -502,7 +633,6 @@ class OwnerProvider extends ChangeNotifier {
   // PRIVATE HELPERS
   // ============================================================
 
-  /// Maps raw API summary JSON → StationSummary model.
   StationSummary _parseSummaryFromApi(Map<String, dynamic> json) {
     return StationSummary(
       stationId: _toInt(json['stationId'] ?? json['station_id'] ?? 0),
@@ -512,49 +642,28 @@ class OwnerProvider extends ChangeNotifier {
       stationCode: json['stationCode']?.toString() ??
           json['station_code']?.toString() ??
           '',
-      
-      // SALES FIELDS - DOUBLE
       todaySales: _toDouble(json['totalSales'] ?? json['todaySales'] ?? json['today_sales'] ?? 0),
       weeklySales: _toDouble(json['weeklySales'] ?? json['weekly_sales'] ?? 0),
       monthlySales: _toDouble(json['monthlySales'] ?? json['monthly_sales'] ?? 0),
       yearlySales: _toDouble(json['yearlySales'] ?? json['yearly_sales'] ?? 0),
       lastMonthSales: _toDouble(json['lastMonthSales'] ?? json['last_month_sales'] ?? 0),
       salesGrowth: _toDouble(json['salesGrowth'] ?? json['sales_growth'] ?? 0),
-      
-      // TRANSACTION FIELDS - INT
       todayTransactions: _toInt(json['transactionCount'] ?? json['todayTransactions'] ?? json['today_transactions'] ?? 0),
       totalTransactions: _toInt(json['totalTransactions'] ?? json['total_transactions'] ?? 0),
-      
-      // AVERAGE - DOUBLE
       averageTransactionValue: _toDouble(json['averageTransaction'] ?? json['averageTransactionValue'] ?? json['average_transaction_value'] ?? 0),
-      
-      // PAYMENT TOTALS - DOUBLE
       cashTotal: _toDouble(json['cashTotal'] ?? json['cash_total'] ?? 0),
       cardTotal: _toDouble(json['cardTotal'] ?? json['card_total'] ?? 0),
       mpesaTotal: _toDouble(json['mpesaTotal'] ?? json['mpesa_total'] ?? 0),
-      
-      // PUMP FIELDS - INT
       totalPumps: _toInt(json['totalPumps'] ?? json['total_pumps'] ?? 0),
       activePumps: _toInt(json['activePumps'] ?? json['active_pumps'] ?? 0),
       pumpsUnderMaintenance: _toInt(json['pumpsUnderMaintenance'] ?? json['pumps_under_maintenance'] ?? 0),
-      
-      // ATTENDANT FIELDS - INT
       totalAttendants: _toInt((json['staffMetrics'] as Map?)?['totalStaff'] ?? json['totalAttendants'] ?? json['total_attendants'] ?? 0),
       activeAttendants: _toInt((json['staffMetrics'] as Map?)?['activeStaff'] ?? json['activeAttendants'] ?? json['active_attendants'] ?? 0),
       pendingShiftReports: _toInt(json['pendingShiftReports'] ?? json['pending_shift_reports'] ?? 0),
-      
-      // INVENTORY - DOUBLE
       totalFuelInventory: _toDouble(json['totalFuelInventory'] ?? json['total_fuel_inventory'] ?? 0),
-      
-      // LOW FUEL ALERTS - DOUBLE (matches model)
       lowFuelAlerts: _toDouble(json['lowFuelAlerts'] ?? json['low_fuel_alerts'] ?? 0),
-      
-      // PERFORMANCE SCORES - DOUBLE
       attendantPerformanceScore: _toDouble(json['attendantPerformanceScore'] ?? json['attendant_performance_score'] ?? 0),
-      
-      // CUSTOMER SATISFACTION - INT (matches model)
       customerSatisfaction: _toInt(json['customerSatisfaction'] ?? json['customer_satisfaction'] ?? 0),
-      
       lastUpdated: DateTime.now(),
     );
   }
@@ -579,7 +688,6 @@ class OwnerProvider extends ChangeNotifier {
     );
   }
 
-  /// Convert any value to int safely
   int _toInt(dynamic value) {
     if (value == null) return 0;
     if (value is int) return value;
@@ -588,7 +696,6 @@ class OwnerProvider extends ChangeNotifier {
     return 0;
   }
 
-  /// Convert any value to double safely
   double _toDouble(dynamic value) {
     if (value == null) return 0.0;
     if (value is double) return value;

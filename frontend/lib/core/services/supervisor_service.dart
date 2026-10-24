@@ -1,12 +1,25 @@
 // lib/core/services/supervisor_service.dart
 import 'package:flutter/foundation.dart';
-import 'package:paynotify/core/services/api_service.dart';
+import 'api_service.dart';
 
 class SupervisorService {
-  // Get all pumps with status
-  static Future<List<Map<String, dynamic>>> getAllPumps() async {
+  // ─────────────────────────────────────────────
+  // DEPENDENCY INJECTION
+  // ─────────────────────────────────────────────
+  final ApiService _apiService;
+
+  SupervisorService({ApiService? apiService})
+      : _apiService = apiService ?? ApiService();
+
+  // ─────────────────────────────────────────────
+  // GET ALL PUMPS
+  // ─────────────────────────────────────────────
+
+  /// GET /supervisor/pumps
+  /// Returns all pumps with status for supervisor view
+  Future<List<Map<String, dynamic>>> getAllPumps() async {
     try {
-      final response = await ApiService.get('/supervisor/pumps');
+      final response = await _apiService.get('/supervisor/pumps');
       if (response['success'] == true) {
         return List<Map<String, dynamic>>.from(response['data']);
       }
@@ -16,16 +29,21 @@ class SupervisorService {
       return [];
     }
   }
-  
-  // Override sale on any pump
-  static Future<Map<String, dynamic>?> overrideSale({
+
+  // ─────────────────────────────────────────────
+  // OVERRIDE SALE
+  // ─────────────────────────────────────────────
+
+  /// POST /supervisor/sale
+  /// Allows supervisor to override a sale on any pump
+  Future<Map<String, dynamic>?> overrideSale({
     required int pumpId,
     required double amount,
     required String reason,
     String? customerName,
   }) async {
     try {
-      final response = await ApiService.post('/supervisor/sale', {
+      final response = await _apiService.post('/supervisor/sale', {
         'pump_id': pumpId,
         'amount': amount,
         'reason': reason,
@@ -40,9 +58,14 @@ class SupervisorService {
       return null;
     }
   }
-  
-  // Record fuel refill
-  static Future<Map<String, dynamic>?> recordFuelRefill({
+
+  // ─────────────────────────────────────────────
+  // RECORD FUEL REFILL
+  // ─────────────────────────────────────────────
+
+  /// POST /supervisor/refill
+  /// Records a fuel tank refill (delivery)
+  Future<Map<String, dynamic>?> recordFuelRefill({
     required String tankId,
     required double litersAdded,
     required double costPerLiter,
@@ -53,7 +76,7 @@ class SupervisorService {
     String? notes,
   }) async {
     try {
-      final response = await ApiService.post('/supervisor/refill', {
+      final response = await _apiService.post('/supervisor/refill', {
         'tank_id': tankId,
         'liters_added': litersAdded,
         'cost_per_liter': costPerLiter,
@@ -73,16 +96,22 @@ class SupervisorService {
       return null;
     }
   }
-  
-  // Record meter reading
-  static Future<Map<String, dynamic>?> recordMeterReading({
+
+  // ─────────────────────────────────────────────
+  // RECORD METER READING
+  // ─────────────────────────────────────────────
+
+  /// POST /supervisor/reading
+  /// Records a meter reading for a pump
+  /// readingType: opening, closing, interim, spot
+  Future<Map<String, dynamic>?> recordMeterReading({
     required int pumpId,
     required double readingValue,
     required String readingType, // opening, closing, interim, spot
     String? notes,
   }) async {
     try {
-      final response = await ApiService.post('/supervisor/reading', {
+      final response = await _apiService.post('/supervisor/reading', {
         'pump_id': pumpId,
         'reading_value': readingValue,
         'reading_type': readingType,
@@ -97,11 +126,16 @@ class SupervisorService {
       return null;
     }
   }
-  
-  // Get pending shift reports
-  static Future<List<Map<String, dynamic>>> getPendingShiftReports() async {
+
+  // ─────────────────────────────────────────────
+  // GET PENDING SHIFT REPORTS
+  // ─────────────────────────────────────────────
+
+  /// GET /supervisor/shifts/pending
+  /// Returns all pending shift reports for approval
+  Future<List<Map<String, dynamic>>> getPendingShiftReports() async {
     try {
-      final response = await ApiService.get('/supervisor/shifts/pending');
+      final response = await _apiService.get('/supervisor/shifts/pending');
       if (response['success'] == true) {
         return List<Map<String, dynamic>>.from(response['data']);
       }
@@ -111,41 +145,58 @@ class SupervisorService {
       return [];
     }
   }
-  
-  // Approve shift report
-  static Future<bool> approveShiftReport(int reportId, String remarks) async {
+
+  // ─────────────────────────────────────────────
+  // APPROVE SHIFT REPORT
+  // ─────────────────────────────────────────────
+
+  /// POST /supervisor/shifts/:id/approve
+  /// Approves a pending shift report
+  Future<bool> approveShiftReport(int reportId, String remarks) async {
     try {
-      final response = await ApiService.post('/supervisor/shifts/$reportId/approve', {
-        'remarks': remarks,
-      });
+      final response = await _apiService.post(
+        '/supervisor/shifts/$reportId/approve',
+        {'remarks': remarks},
+      );
       return response['success'] == true;
     } catch (e) {
       debugPrint('Approve shift report error: $e');
       return false;
     }
   }
-  
-  // Reject shift report
-  static Future<bool> rejectShiftReport(int reportId, String reason) async {
+
+  // ─────────────────────────────────────────────
+  // REJECT SHIFT REPORT
+  // ─────────────────────────────────────────────
+
+  /// POST /supervisor/shifts/:id/reject
+  /// Rejects a pending shift report with reason
+  Future<bool> rejectShiftReport(int reportId, String reason) async {
     try {
-      final response = await ApiService.post('/supervisor/shifts/$reportId/reject', {
-        'reason': reason,
-      });
+      final response = await _apiService.post(
+        '/supervisor/shifts/$reportId/reject',
+        {'reason': reason},
+      );
       return response['success'] == true;
     } catch (e) {
       debugPrint('Reject shift report error: $e');
       return false;
     }
   }
-  
-  // Emergency stop
-  static Future<Map<String, dynamic>?> emergencyStop({
+
+  // ─────────────────────────────────────────────
+  // EMERGENCY STOP
+  // ─────────────────────────────────────────────
+
+  /// POST /supervisor/emergency-stop
+  /// Triggers an emergency stop on a pump
+  Future<Map<String, dynamic>?> emergencyStop({
     required int pumpId,
     required String reason,
     required String emergencyType,
   }) async {
     try {
-      final response = await ApiService.post('/supervisor/emergency-stop', {
+      final response = await _apiService.post('/supervisor/emergency-stop', {
         'pump_id': pumpId,
         'reason': reason,
         'type': emergencyType,
@@ -159,11 +210,16 @@ class SupervisorService {
       return null;
     }
   }
-  
-  // Get intervention logs
-  static Future<List<Map<String, dynamic>>> getInterventionLogs() async {
+
+  // ─────────────────────────────────────────────
+  // GET INTERVENTION LOGS
+  // ─────────────────────────────────────────────
+
+  /// GET /supervisor/interventions
+  /// Returns all supervisor intervention logs
+  Future<List<Map<String, dynamic>>> getInterventionLogs() async {
     try {
-      final response = await ApiService.get('/supervisor/interventions');
+      final response = await _apiService.get('/supervisor/interventions');
       if (response['success'] == true) {
         return List<Map<String, dynamic>>.from(response['data']);
       }
@@ -173,16 +229,21 @@ class SupervisorService {
       return [];
     }
   }
-  
-  // Generate reports
-  static Future<Map<String, dynamic>?> generateReport({
+
+  // ─────────────────────────────────────────────
+  // GENERATE REPORTS
+  // ─────────────────────────────────────────────
+
+  /// GET /supervisor/reports
+  /// Generates a report for the given date range
+  Future<Map<String, dynamic>?> generateReport({
     required String reportType,
     required DateTime startDate,
     required DateTime endDate,
   }) async {
     try {
-      final response = await ApiService.get(
-        '/supervisor/reports?type=$reportType&start=${startDate.toIso8601String()}&end=${endDate.toIso8601String()}'
+      final response = await _apiService.get(
+        '/supervisor/reports?type=$reportType&start=${startDate.toIso8601String()}&end=${endDate.toIso8601String()}',
       );
       if (response['success'] == true) {
         return response['data'];
@@ -193,11 +254,16 @@ class SupervisorService {
       return null;
     }
   }
-  
-  // Get supervisor dashboard data
-  static Future<Map<String, dynamic>?> getSupervisorDashboard() async {
+
+  // ─────────────────────────────────────────────
+  // GET SUPERVISOR DASHBOARD
+  // ─────────────────────────────────────────────
+
+  /// GET /dashboard/supervisor
+  /// Returns supervisor dashboard data
+  Future<Map<String, dynamic>?> getSupervisorDashboard() async {
     try {
-      final response = await ApiService.get('/dashboard/supervisor');
+      final response = await _apiService.get('/dashboard/supervisor');
       if (response['success'] == true) {
         return response['data'];
       }
@@ -206,5 +272,13 @@ class SupervisorService {
       debugPrint('Get supervisor dashboard error: $e');
       return null;
     }
+  }
+
+  // ─────────────────────────────────────────────
+  // DISPOSE
+  // ─────────────────────────────────────────────
+
+  void dispose() {
+    // Clean up resources if needed
   }
 }

@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'api_service.dart';
 
 class AuthService {
+  // ✅ Create an instance of ApiService
+  static final ApiService _apiService = ApiService();
+
   // ─────────────────────────────────────────────
   // LOGIN
   // ─────────────────────────────────────────────
@@ -13,7 +16,8 @@ class AuthService {
     String username,
     String password,
   ) async {
-    final response = await ApiService.postPublic('/auth/login', {
+    // ✅ Use instance method
+    final response = await _apiService.postPublic('/auth/login', {
       'username': username.trim(),
       'password': password,
     });
@@ -65,8 +69,8 @@ class AuthService {
   /// Calls POST /api/auth/logout then clears local storage
   static Future<void> logout() async {
     try {
-      // Tell the backend to invalidate the session
-      await ApiService.post('/auth/logout', {});
+      // ✅ Use instance method
+      await _apiService.post('/auth/logout', {});
     } catch (e) {
       // Even if the server call fails, clear local storage
       debugPrint('Logout server call failed: $e');
@@ -83,7 +87,8 @@ class AuthService {
   /// Calls GET /api/auth/me to verify the token is still valid
   /// and refresh user data from server
   static Future<Map<String, dynamic>> getCurrentUser() async {
-    final response = await ApiService.get('/auth/me');
+    // ✅ Use instance method
+    final response = await _apiService.get('/auth/me');
 
     if (response['success'] == true) {
       // ✅ FIX: Extract from 'data' object

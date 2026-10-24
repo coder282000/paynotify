@@ -4,12 +4,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../domain/models/expense_model.dart';
 import '../../domain/models/expense_category.dart';
 import '../widgets/expense_card.dart';
 import '../widgets/add_expense_dialog.dart';
 import '../widgets/expense_filter_bar.dart';
 import '../widgets/expense_category_chart.dart';
+import '../providers/manager_provider.dart';
 
 // MARK: - Constants
 class _ExpenseConstants {
@@ -93,21 +95,39 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen>
   ExpenseCategory? _selectedCategory;
   String _searchQuery = '';
   
+  // Revenue totals (calculated from transactions)
+  double _totalRevenue = 0.0;
+  
+  // Animation controller for staggered animations
+  late AnimationController _animationController;
+  
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _loadExpenses();
-    _loadRevenues();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: _ExpenseConstants.animationDuration,
+    );
+    _loadData();
   }
   
   @override
   void dispose() {
     _tabController.dispose();
+    _animationController.dispose();
     super.dispose();
   }
 
   // MARK: - Data Loading
+  Future<void> _loadData() async {
+    await _loadExpenses();
+    await _loadRevenues();
+    // Trigger animation after data loads
+    _animationController.forward(from: 0);
+  }
+
+  // ✅ FIXED: Bug 3 - Date corruption fixed by removing unnecessary round-trip
   Future<void> _loadExpenses() async {
     if (!mounted) return;
     
@@ -117,11 +137,20 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen>
     });
     
     try {
-      await Future.delayed(_ExpenseConstants.animationDuration);
+      final provider = Provider.of<ManagerProvider>(context, listen: false);
+      
+      // Load expenses from the provider
+      await provider.loadExpenses();
       
       if (!mounted) return;
       
-      _expenses = _generateMockExpenses();
+      // ✅ FIX: provider.expenses is already List<Expense>
+      // Just copy the list directly - preserves all data including dates
+      _expenses = List.from(provider.expenses);
+      
+      // Sort by date (newest first) - now dates are preserved
+      _expenses.sort((a, b) => b.date.compareTo(a.date));
+      
       _applyFilters();
       
       setState(() => _isLoading = false);
@@ -143,129 +172,33 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen>
   }
 
   Future<void> _loadRevenues() async {
-    _revenues = _generateMockRevenues();
-    _applyRevenueFilters();
-  }
-
-  List<RevenueRecord> _generateMockRevenues() {
-    final now = DateTime.now();
-    return [
-      RevenueRecord(
-        id: 'rev1',
-        amount: 450000,
-        date: now.subtract(const Duration(days: 1)),
-        source: 'Fuel Sales',
-        description: 'Daily fuel sales',
-        recordedBy: 'Manager',
-      ),
-      RevenueRecord(
-        id: 'rev2',
-        amount: 380000,
-        date: now.subtract(const Duration(days: 2)),
-        source: 'Fuel Sales',
-        description: 'Daily fuel sales',
-        recordedBy: 'Manager',
-      ),
-      RevenueRecord(
-        id: 'rev3',
-        amount: 520000,
-        date: now.subtract(const Duration(days: 3)),
-        source: 'Fuel Sales',
-        description: 'Daily fuel sales',
-        recordedBy: 'Manager',
-      ),
-      RevenueRecord(
-        id: 'rev4',
-        amount: 15000,
-        date: now.subtract(const Duration(days: 5)),
-        source: 'Convenience Store',
-        description: 'Shop sales',
-        recordedBy: 'Manager',
-      ),
-      RevenueRecord(
-        id: 'rev5',
-        amount: 5000,
-        date: now.subtract(const Duration(days: 7)),
-        source: 'Car Wash',
-        description: 'Car wash services',
-        recordedBy: 'Manager',
-      ),
-    ];
-  }
-
-  List<Expense> _generateMockExpenses() {
-    final now = DateTime.now();
-    return [
-      Expense(
-        id: '1',
-        category: ExpenseCategory.fuelPurchase,
-        amount: 50000,
-        description: 'Fuel stock purchase',
-        date: now.subtract(const Duration(days: 2)),
-        vendorName: 'Total Energies',
-        paymentMethod: 'Bank Transfer',
-        referenceNumber: 'INV-2024001',
-        createdBy: 'Manager',
-        createdAt: now,
-      ),
-      Expense(
-        id: '2',
-        category: ExpenseCategory.salary,
-        amount: 150000,
-        description: 'Staff monthly salaries',
-        date: now.subtract(const Duration(days: 5)),
-        vendorName: 'Staff',
-        paymentMethod: 'Bank Transfer',
-        createdBy: 'Manager',
-        createdAt: now,
-      ),
-      Expense(
-        id: '3',
-        category: ExpenseCategory.maintenance,
-        amount: 15000,
-        description: 'Pump 3 calibration',
-        date: now.subtract(const Duration(days: 12)),
-        vendorName: 'PumpTech Services',
-        paymentMethod: 'M-Pesa',
-        referenceNumber: 'MPESA-ABC123',
-        createdBy: 'Manager',
-        createdAt: now,
-      ),
-      Expense(
-        id: '4',
-        category: ExpenseCategory.utilities,
-        amount: 25000,
-        description: 'Electricity bill',
-        date: now.subtract(const Duration(days: 8)),
-        vendorName: 'KPLC',
-        paymentMethod: 'Bank Transfer',
-        referenceNumber: 'ELEC-2024-001',
-        createdBy: 'Manager',
-        createdAt: now,
-      ),
-      Expense(
-        id: '5',
-        category: ExpenseCategory.rent,
-        amount: 100000,
-        description: 'Monthly station rent',
-        date: now.subtract(const Duration(days: 2)),
-        vendorName: 'Landlord',
-        paymentMethod: 'Bank Transfer',
-        createdBy: 'Manager',
-        createdAt: now,
-      ),
-      Expense(
-        id: '6',
-        category: ExpenseCategory.supplies,
-        amount: 8000,
-        description: 'Office supplies',
-        date: now.subtract(const Duration(days: 3)),
-        vendorName: 'Stationery World',
-        paymentMethod: 'Cash',
-        createdBy: 'Manager',
-        createdAt: now,
-      ),
-    ]..sort((a, b) => b.date.compareTo(a.date));
+    try {
+      final provider = Provider.of<ManagerProvider>(context, listen: false);
+      
+      // Get today's sales from dashboard data
+      final dashboard = provider.stationSummary;
+      _totalRevenue = dashboard.todaySales;
+      
+      // Create revenue records from transaction data
+      final transactions = provider.recentTransactions;
+      _revenues = transactions.map((tx) {
+        return RevenueRecord(
+          id: tx.id,
+          amount: tx.amount,
+          date: tx.time,
+          source: tx.type.toUpperCase(),
+          description: '${tx.pump} - ${tx.attendant}',
+          recordedBy: tx.attendant,
+        );
+      }).toList();
+      
+      _applyRevenueFilters();
+      
+    } catch (e) {
+      debugPrint('Load revenues error: $e');
+      // If we can't load revenue, use empty list
+      _revenues = [];
+    }
   }
 
   void _applyFilters() {
@@ -309,10 +242,6 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen>
   }
 
   // MARK: - Financial Calculations
-  double get _totalRevenue {
-    return _filteredRevenues.fold(0.0, (sum, r) => sum + r.amount);
-  }
-
   double get _totalExpenses {
     return _filteredExpenses.fold(0.0, (sum, e) => sum + e.amount);
   }
@@ -578,25 +507,35 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen>
   }
 
   // MARK: - Expense Actions
+  // ✅ FIXED: Bug 2 - Use toBackendJson() instead of toJson()
   Future<void> _addExpense(Expense expense) async {
     try {
-      await Future.delayed(const Duration(milliseconds: 500));
+      final provider = Provider.of<ManagerProvider>(context, listen: false);
+      
+      // ✅ FIX: Use toBackendJson() - sends snake_case keys to match backend
+      final expenseData = expense.toBackendJson();
+      final success = await provider.createExpense(expenseData);
       
       if (!mounted) return;
       
-      setState(() {
-        _expenses.insert(0, expense);
-        _applyFilters();
-      });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Expense added successfully'),
-            backgroundColor: _ExpenseConstants.accentGreen,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+      if (success) {
+        // Reload expenses
+        await _loadExpenses();
+        
+        // Trigger animation
+        _animationController.forward(from: 0);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Expense added successfully'),
+              backgroundColor: _ExpenseConstants.accentGreen,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } else {
+        throw Exception(provider.errorMessage ?? 'Failed to add expense');
       }
     } catch (e) {
       if (mounted) {
@@ -611,16 +550,19 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen>
     }
   }
 
+  // ✅ FIXED: Bug 2 - Use toBackendJson() instead of toJson()
   Future<void> _updateExpense(Expense expense) async {
     try {
-      final index = _expenses.indexWhere((e) => e.id == expense.id);
-      if (index != -1) {
-        if (!mounted) return;
-        
-        setState(() {
-          _expenses[index] = expense;
-          _applyFilters();
-        });
+      final provider = Provider.of<ManagerProvider>(context, listen: false);
+      
+      // ✅ FIX: Use toBackendJson() - sends snake_case keys to match backend
+      final expenseData = expense.toBackendJson();
+      final success = await provider.updateExpense(expense.id, expenseData);
+      
+      if (!mounted) return;
+      
+      if (success) {
+        await _loadExpenses();
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -631,6 +573,8 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen>
             ),
           );
         }
+      } else {
+        throw Exception(provider.errorMessage ?? 'Failed to update expense');
       }
     } catch (e) {
       if (mounted) {
@@ -647,21 +591,26 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen>
 
   Future<void> _deleteExpense(String expenseId) async {
     try {
+      final provider = Provider.of<ManagerProvider>(context, listen: false);
+      
+      final success = await provider.deleteExpense(expenseId);
+      
       if (!mounted) return;
       
-      setState(() {
-        _expenses.removeWhere((e) => e.id == expenseId);
-        _applyFilters();
-      });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Expense deleted successfully'),
-            backgroundColor: _ExpenseConstants.accentGreen,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+      if (success) {
+        await _loadExpenses();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Expense deleted successfully'),
+              backgroundColor: _ExpenseConstants.accentGreen,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } else {
+        throw Exception(provider.errorMessage ?? 'Failed to delete expense');
       }
     } catch (e) {
       if (mounted) {
@@ -706,7 +655,7 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen>
         action: SnackBarAction(
           label: 'Retry',
           textColor: Colors.white,
-          onPressed: _loadExpenses,
+          onPressed: _loadData,
         ),
         duration: const Duration(seconds: 5),
       ),
@@ -1193,13 +1142,8 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen>
     final isTablet = screenWidth > _ExpenseConstants.mobileBreakpoint && 
                      screenWidth <= _ExpenseConstants.tabletBreakpoint;
     
-    if (isDesktop) {
-      debugPrint('Desktop layout active');
-    } else if (isTablet) {
-      debugPrint('Tablet layout active');
-    } else {
-      debugPrint('Mobile layout active');
-    }
+    // Listen to provider changes
+    final provider = Provider.of<ManagerProvider>(context);
     
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
@@ -1228,6 +1172,11 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen>
               });
             },
             tooltip: 'Filter',
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadData,
+            tooltip: 'Refresh',
           ),
         ],
       ),
@@ -1397,9 +1346,7 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen>
     }
 
     return RefreshIndicator(
-      onRefresh: () async {
-        await _loadRevenues();
-      },
+      onRefresh: _loadData,
       color: _ExpenseConstants.primaryDark,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),
@@ -1622,7 +1569,7 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen>
                       'Description',
                       revenue.description!,
                       Icons.description,
-                    ),
+                  ),
                   _buildInfoRow(
                     'Recorded By',
                     revenue.recordedBy,
@@ -1677,7 +1624,7 @@ class _ExpenseTrackingScreenState extends State<ExpenseTrackingScreen>
     }
 
     return RefreshIndicator(
-      onRefresh: _loadExpenses,
+      onRefresh: _loadData,
       color: _ExpenseConstants.primaryDark,
       child: ListView.builder(
         padding: const EdgeInsets.all(16),

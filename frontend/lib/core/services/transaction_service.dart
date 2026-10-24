@@ -4,6 +4,14 @@ import 'api_service.dart';
 
 class TransactionService {
   // ─────────────────────────────────────────────
+  // DEPENDENCY INJECTION
+  // ─────────────────────────────────────────────
+  final ApiService _apiService;
+
+  TransactionService({ApiService? apiService})
+      : _apiService = apiService ?? ApiService();
+
+  // ─────────────────────────────────────────────
   // GET TRANSACTIONS
   // ─────────────────────────────────────────────
 
@@ -15,7 +23,7 @@ class TransactionService {
   /// Each item: id, amount, phone, customerName, paymentType, status,
   ///   pumpId, pumpNumber, attendantId, attendantName,
   ///   litersDispensed, mpesaReference, note, createdAt
-  static Future<List<Map<String, dynamic>>> getTransactions({
+  Future<List<Map<String, dynamic>>> getTransactions({
     String? status,
     int? pumpId,
     int limit = 50,
@@ -29,7 +37,7 @@ class TransactionService {
     params.add('offset=$offset');
 
     final query = params.isNotEmpty ? '?${params.join('&')}' : '';
-    final response = await ApiService.get('/transactions$query');
+    final response = await _apiService.get('/transactions$query');
 
     if (response['success'] == true) {
       final raw = response['data'] ?? [];
@@ -50,7 +58,7 @@ class TransactionService {
   ///
   /// Backend returns: { success, data: { id, amount, paymentType,
   ///   status, pumpId, attendantId, createdAt } }
-  static Future<Map<String, dynamic>?> recordCashSale({
+  Future<Map<String, dynamic>?> recordCashSale({
     required int pumpId,
     required double amount,
     String? customerName,
@@ -74,7 +82,7 @@ class TransactionService {
 
     debugPrint('Recording cash sale: $body');
 
-    final response = await ApiService.post('/transactions/cash', body);
+    final response = await _apiService.post('/transactions/cash', body);
 
     if (response['success'] == true) {
       debugPrint('Cash sale recorded: ${response['data']}');
@@ -103,7 +111,7 @@ class TransactionService {
   ///
   /// Backend returns: { success, data: { id, amount, paymentType,
   ///   status, pumpId, attendantId, createdAt } }
-  static Future<Map<String, dynamic>?> recordCardSale({
+  Future<Map<String, dynamic>?> recordCardSale({
     required int pumpId,
     required double amount,
     String? customerName,
@@ -127,7 +135,7 @@ class TransactionService {
 
     debugPrint('Recording card sale: $body');
 
-    final response = await ApiService.post('/transactions/card', body);
+    final response = await _apiService.post('/transactions/card', body);
 
     if (response['success'] == true) {
       debugPrint('Card sale recorded: ${response['data']}');
@@ -151,12 +159,12 @@ class TransactionService {
 
   /// Calls POST /api/transactions/mpesa
   /// This is a placeholder until Phase 3 M-Pesa integration
-  static Future<Map<String, dynamic>?> initiateMpesa({
+  Future<Map<String, dynamic>?> initiateMpesa({
     required int pumpId,
     required double amount,
     required String phoneNumber,
   }) async {
-    final response = await ApiService.post('/transactions/mpesa', {
+    final response = await _apiService.post('/transactions/mpesa', {
       'pump_id': pumpId,
       'amount': amount,
       'phone_number': phoneNumber,
@@ -179,7 +187,7 @@ class TransactionService {
   ///
   /// Backend returns: { success, data: { overview, byPaymentType,
   ///   byPump, byPaymentTypeDetailed } }
-  static Future<Map<String, dynamic>?> getTransactionSummary({
+  Future<Map<String, dynamic>?> getTransactionSummary({
     String? startDate,
     String? endDate,
   }) async {
@@ -188,7 +196,7 @@ class TransactionService {
     if (endDate != null) params.add('end_date=$endDate');
 
     final query = params.isNotEmpty ? '?${params.join('&')}' : '';
-    final response = await ApiService.get('/transactions/summary$query');
+    final response = await _apiService.get('/transactions/summary$query');
 
     if (response['success'] == true) {
       return response['data'] as Map<String, dynamic>?;
@@ -196,5 +204,53 @@ class TransactionService {
 
     debugPrint('getTransactionSummary error: ${response['message']}');
     return null;
+  }
+
+  // ─────────────────────────────────────────────
+  // GET TRANSACTION BY ID
+  // ─────────────────────────────────────────────
+
+  /// Calls GET /api/transactions/:id
+  Future<Map<String, dynamic>?> getTransactionById(String transactionId) async {
+    try {
+      final response = await _apiService.get('/transactions/$transactionId');
+
+      if (response['success'] == true) {
+        return response['data'] as Map<String, dynamic>?;
+      }
+      debugPrint('getTransactionById error: ${response['message']}');
+    } catch (e) {
+      debugPrint('getTransactionById exception: $e');
+    }
+    return null;
+  }
+
+  // ─────────────────────────────────────────────
+  // UPDATE TRANSACTION STATUS
+  // ─────────────────────────────────────────────
+
+  /// Calls PUT /api/transactions/:id/status
+  Future<bool> updateTransactionStatus(
+    String transactionId,
+    String status,
+  ) async {
+    try {
+      final response = await _apiService.put(
+        '/transactions/$transactionId/status',
+        {'status': status},
+      );
+      return response['success'] == true;
+    } catch (e) {
+      debugPrint('updateTransactionStatus exception: $e');
+      return false;
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  // DISPOSE
+  // ─────────────────────────────────────────────
+
+  void dispose() {
+    // Clean up resources if needed
   }
 }

@@ -43,6 +43,11 @@ class AddStationScreen extends StatefulWidget {
 }
 
 class _AddStationScreenState extends State<AddStationScreen> {
+  // ─────────────────────────────────────────────
+  // DEPENDENCY INJECTION
+  // ─────────────────────────────────────────────
+  final PumpService _pumpService = PumpService();
+
   // Step tracking
   int _currentStep = 0; // 0 = station details, 1 = add pumps
 
@@ -224,7 +229,8 @@ class _AddStationScreenState extends State<AddStationScreen> {
 
     for (final pump in _pumps) {
       try {
-        final result = await PumpService.createPump(
+        // ✅ Use instance method instead of static
+        final result = await _pumpService.createPump(
           pumpNumber: pump.numberController.text.trim(),
           fuelType: pump.fuelType,
           pricePerLiter:
@@ -779,7 +785,7 @@ class _AddStationScreenState extends State<AddStationScreen> {
                     const Icon(Icons.local_gas_station),
                 border: const OutlineInputBorder(
                   borderRadius:
-                      BorderRadius.all(Radius.circular(8)),
+                      const BorderRadius.all(Radius.circular(8)),
                 ),
                 isDense: true,
               ),

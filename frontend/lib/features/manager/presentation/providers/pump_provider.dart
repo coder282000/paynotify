@@ -5,6 +5,17 @@ import '../../domain/models/pump_config.dart';
 import '../../../../core/services/pump_service.dart';
 
 class PumpProvider extends ChangeNotifier {
+  // ─────────────────────────────────────────────
+  // DEPENDENCY INJECTION
+  // ─────────────────────────────────────────────
+  final PumpService _pumpService;
+
+  PumpProvider({PumpService? pumpService})
+      : _pumpService = pumpService ?? PumpService();
+
+  // ─────────────────────────────────────────────
+  // DATA
+  // ─────────────────────────────────────────────
   List<PumpConfig> _pumps = [];
   List<PumpConfig> _filteredPumps = [];
   PumpConfig? _selectedPump;
@@ -35,7 +46,7 @@ class PumpProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await PumpService.getManagerPumps();
+      final response = await _pumpService.getManagerPumps();
       _pumps = response.map((json) => PumpConfig.fromBackendJson(json)).toList();
       _filteredPumps = List.from(_pumps);
     } catch (e) {
@@ -53,7 +64,7 @@ class PumpProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await PumpService.getManagerPumps();
+      final response = await _pumpService.getManagerPumps();
       _pumps = response.map((json) => PumpConfig.fromBackendJson(json)).toList();
       _filteredPumps = List.from(_pumps);
       _errorMessage = null;
@@ -102,7 +113,7 @@ class PumpProvider extends ChangeNotifier {
   // ── Select Pump ──
   Future<void> selectPump(int id) async {
     try {
-      final response = await PumpService.getManagerPumpById(id);
+      final response = await _pumpService.getManagerPumpById(id);
       if (response != null) {
         _selectedPump = PumpConfig.fromBackendJson(response);
         notifyListeners();
@@ -120,7 +131,7 @@ class PumpProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await PumpService.createManagerPump(
+      final response = await _pumpService.createManagerPump(
         pumpNumber: data['pump_number'],
         fuelType: data['fuel_type'],
         pricePerLiter: data['price_per_liter'],
@@ -144,7 +155,7 @@ class PumpProvider extends ChangeNotifier {
   // ── Update Status ──
   Future<bool> updateStatus(int id, String status) async {
     try {
-      final success = await PumpService.updateManagerPumpStatus(id, status);
+      final success = await _pumpService.updateManagerPumpStatus(id, status);
       if (success) {
         await loadPumps();
         return true;
@@ -160,7 +171,7 @@ class PumpProvider extends ChangeNotifier {
   // ── Update Price ──
   Future<bool> updatePrice(int id, double price) async {
     try {
-      final success = await PumpService.updateManagerFuelPrice(id, price);
+      final success = await _pumpService.updateManagerFuelPrice(id, price);
       if (success) {
         await loadPumps();
         return true;
@@ -176,7 +187,7 @@ class PumpProvider extends ChangeNotifier {
   // ── Delete Pump ──
   Future<bool> deletePump(int id) async {
     try {
-      final success = await PumpService.deleteManagerPump(id);
+      final success = await _pumpService.deleteManagerPump(id);
       if (success) {
         await loadPumps();
         return true;
@@ -192,7 +203,7 @@ class PumpProvider extends ChangeNotifier {
   // ── Get Performance ──
   Future<Map<String, dynamic>?> getPerformance(int id, {String period = 'today'}) async {
     try {
-      return await PumpService.getPumpPerformance(id, period: period);
+      return await _pumpService.getPumpPerformance(id, period: period);
     } catch (e) {
       _errorMessage = e.toString();
       debugPrint('Get performance error: $e');
@@ -210,5 +221,14 @@ class PumpProvider extends ChangeNotifier {
   void resetFilters() {
     _filteredPumps = List.from(_pumps);
     notifyListeners();
+  }
+
+  // ─────────────────────────────────────────────
+  // DISPOSE
+  // ─────────────────────────────────────────────
+  @override
+  void dispose() {
+    _pumpService.dispose();
+    super.dispose();
   }
 }

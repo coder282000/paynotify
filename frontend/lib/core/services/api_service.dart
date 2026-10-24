@@ -7,27 +7,25 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiService {
   // ─────────────────────────────────────────────
-  // BASE URL — Production ready with environment support
+  // BASE URL
   // ─────────────────────────────────────────────
   
-  // Get base URL from environment variable or use default
   static String get _baseUrl {
-    // For web, use the current host (works with ngrok too!)
+    // For web, use the current host (works with your domain)
     if (kIsWeb) {
-      // Use the same host that served the page
       final host = Uri.base.origin;
-      return '$host/api';
+      
+      // Check if we're on your production domain
+      if (host.contains('paynotfy.dpdns.org') || host.contains('paynotify')) {
+        return '$host/api';
+      }
+      
+      // For local web development
+      return dotenv.env['API_BASE_URL'] ?? 'https://paynotfy.dpdns.org/api';
     }
     
     // For mobile, use environment variable
-    return dotenv.env['API_BASE_URL'] ?? 'https://unlatch-joystick-grievance.ngrok-free.dev/api';
-  }
-
-  // ─────────────────────────────────────────────
-  // Detect if running in development
-  // ─────────────────────────────────────────────
-  static bool get isDevelopment {
-    return dotenv.env['ENVIRONMENT'] == 'development' || kDebugMode;
+    return dotenv.env['API_BASE_URL'] ?? 'https://paynotfy.dpdns.org/api';
   }
 
   static const Duration _timeout = Duration(seconds: 30);
@@ -83,7 +81,6 @@ class ApiService {
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      'ngrok-skip-browser-warning': 'true',
       if (token != null) 'Authorization': 'Bearer $token',
     };
   }
@@ -91,7 +88,6 @@ class ApiService {
   static Map<String, String> get _publicHeaders => {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'ngrok-skip-browser-warning': 'true',
   };
 
   // ─────────────────────────────────────────────
@@ -99,12 +95,21 @@ class ApiService {
   // ─────────────────────────────────────────────
 
   /// GET request — authenticated
-  static Future<Map<String, dynamic>> get(String endpoint) async {
+  Future<Map<String, dynamic>> get(
+    String endpoint, {
+    Map<String, dynamic>? queryParams,
+  }) async {
     try {
       final headers = await _authHeaders();
-      final uri = Uri.parse('$_baseUrl$endpoint');
+      var uri = Uri.parse('$_baseUrl$endpoint');
+      
+      if (queryParams != null && queryParams.isNotEmpty) {
+        uri = uri.replace(queryParameters: queryParams.map(
+          (key, value) => MapEntry(key, value.toString())
+        ));
+      }
 
-      debugPrint('GET $uri');
+      if (kDebugMode) print('GET $uri');
 
       final response = await http
           .get(uri, headers: headers)
@@ -117,11 +122,20 @@ class ApiService {
   }
 
   /// GET request — public (no auth)
-  static Future<Map<String, dynamic>> getPublic(String endpoint) async {
+  Future<Map<String, dynamic>> getPublic(
+    String endpoint, {
+    Map<String, dynamic>? queryParams,
+  }) async {
     try {
-      final uri = Uri.parse('$_baseUrl$endpoint');
+      var uri = Uri.parse('$_baseUrl$endpoint');
+      
+      if (queryParams != null && queryParams.isNotEmpty) {
+        uri = uri.replace(queryParameters: queryParams.map(
+          (key, value) => MapEntry(key, value.toString())
+        ));
+      }
 
-      debugPrint('GET (public) $uri');
+      if (kDebugMode) print('GET (public) $uri');
 
       final response = await http
           .get(uri, headers: _publicHeaders)
@@ -134,7 +148,7 @@ class ApiService {
   }
 
   /// POST request — authenticated
-  static Future<Map<String, dynamic>> post(
+  Future<Map<String, dynamic>> post(
     String endpoint,
     Map<String, dynamic> body,
   ) async {
@@ -142,7 +156,7 @@ class ApiService {
       final headers = await _authHeaders();
       final uri = Uri.parse('$_baseUrl$endpoint');
 
-      debugPrint('POST $uri body: ${jsonEncode(body)}');
+      if (kDebugMode) print('POST $uri body: ${jsonEncode(body)}');
 
       final response = await http
           .post(uri, headers: headers, body: jsonEncode(body))
@@ -155,14 +169,14 @@ class ApiService {
   }
 
   /// POST request — no auth (for login & registration)
-  static Future<Map<String, dynamic>> postPublic(
+  Future<Map<String, dynamic>> postPublic(
     String endpoint,
     Map<String, dynamic> body,
   ) async {
     try {
       final uri = Uri.parse('$_baseUrl$endpoint');
 
-      debugPrint('POST (public) $uri body: ${jsonEncode(body)}');
+      if (kDebugMode) print('POST (public) $uri body: ${jsonEncode(body)}');
 
       final response = await http
           .post(uri, headers: _publicHeaders, body: jsonEncode(body))
@@ -175,7 +189,7 @@ class ApiService {
   }
 
   /// PUT request — authenticated
-  static Future<Map<String, dynamic>> put(
+  Future<Map<String, dynamic>> put(
     String endpoint,
     Map<String, dynamic> body,
   ) async {
@@ -183,7 +197,7 @@ class ApiService {
       final headers = await _authHeaders();
       final uri = Uri.parse('$_baseUrl$endpoint');
 
-      debugPrint('PUT $uri body: ${jsonEncode(body)}');
+      if (kDebugMode) print('PUT $uri body: ${jsonEncode(body)}');
 
       final response = await http
           .put(uri, headers: headers, body: jsonEncode(body))
@@ -196,12 +210,12 @@ class ApiService {
   }
 
   /// DELETE request — authenticated
-  static Future<Map<String, dynamic>> delete(String endpoint) async {
+  Future<Map<String, dynamic>> delete(String endpoint) async {
     try {
       final headers = await _authHeaders();
       final uri = Uri.parse('$_baseUrl$endpoint');
 
-      debugPrint('DELETE $uri');
+      if (kDebugMode) print('DELETE $uri');
 
       final response = await http
           .delete(uri, headers: headers)
@@ -217,8 +231,8 @@ class ApiService {
   // RESPONSE HANDLER
   // ─────────────────────────────────────────────
 
-  static Map<String, dynamic> _handleResponse(http.Response response) {
-    debugPrint('Response [${response.statusCode}]: ${response.body}');
+  Map<String, dynamic> _handleResponse(http.Response response) {
+    if (kDebugMode) print('Response [${response.statusCode}]: ${response.body}');
 
     if (response.body.isEmpty) {
       return {
@@ -287,8 +301,8 @@ class ApiService {
   // ERROR HANDLER
   // ─────────────────────────────────────────────
 
-  static Map<String, dynamic> _handleError(dynamic error) {
-    debugPrint('ApiService error: $error');
+  Map<String, dynamic> _handleError(dynamic error) {
+    if (kDebugMode) print('ApiService error: $error');
 
     final message = error.toString();
 
@@ -302,9 +316,7 @@ class ApiService {
     if (message.contains('SocketException') || message.contains('Connection refused')) {
       return {
         'success': false,
-        'message': isDevelopment 
-            ? 'Cannot reach server. Make sure the backend is running on port 3000.'
-            : 'Cannot reach server. Please check your internet connection.',
+        'message': 'Cannot reach server. Please check your internet connection.',
       };
     }
 
@@ -326,9 +338,7 @@ class ApiService {
 
     return {
       'success': false,
-      'message': isDevelopment 
-          ? 'Error: ${error.toString()}'
-          : 'An unexpected error occurred. Please try again.',
+      'message': 'An unexpected error occurred. Please try again.',
     };
   }
-}
+}  

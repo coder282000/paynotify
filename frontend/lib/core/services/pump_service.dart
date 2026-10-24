@@ -4,16 +4,24 @@ import 'api_service.dart';
 
 class PumpService {
   // ─────────────────────────────────────────────
+  // DEPENDENCY INJECTION
+  // ─────────────────────────────────────────────
+  final ApiService _apiService;
+
+  PumpService({ApiService? apiService})
+      : _apiService = apiService ?? ApiService();
+
+  // ─────────────────────────────────────────────
   // GET ALL PUMPS (General - for attendants/supervisors)
   // ─────────────────────────────────────────────
 
   /// Calls GET /api/pumps?station_id=X
   /// If stationId is provided, only returns pumps for that station
-  static Future<List<Map<String, dynamic>>> getPumps({
+  Future<List<Map<String, dynamic>>> getPumps({
     int? stationId,
   }) async {
     final query = stationId != null ? '?station_id=$stationId' : '';
-    final response = await ApiService.get('/pumps$query');
+    final response = await _apiService.get('/pumps$query');
 
     if (response['success'] == true) {
       final raw = response['data'] ?? [];
@@ -30,8 +38,8 @@ class PumpService {
 
   /// Calls GET /api/manager/pumps
   /// Returns pumps with today_sales, total_sales, fuel_percentage, etc.
-  static Future<List<Map<String, dynamic>>> getManagerPumps() async {
-    final response = await ApiService.get('/manager/pumps');
+  Future<List<Map<String, dynamic>>> getManagerPumps() async {
+    final response = await _apiService.get('/manager/pumps');
 
     if (response['success'] == true) {
       final raw = response['data'] ?? [];
@@ -46,8 +54,8 @@ class PumpService {
   // GET SINGLE PUMP
   // ─────────────────────────────────────────────
 
-  static Future<Map<String, dynamic>?> getPumpById(int pumpId) async {
-    final response = await ApiService.get('/pumps/$pumpId');
+  Future<Map<String, dynamic>?> getPumpById(int pumpId) async {
+    final response = await _apiService.get('/pumps/$pumpId');
 
     if (response['success'] == true) {
       return response['data'] as Map<String, dynamic>?;
@@ -63,8 +71,8 @@ class PumpService {
 
   /// Calls GET /api/manager/pumps/:id
   /// Returns pump with performance metrics and recent transactions
-  static Future<Map<String, dynamic>?> getManagerPumpById(int pumpId) async {
-    final response = await ApiService.get('/manager/pumps/$pumpId');
+  Future<Map<String, dynamic>?> getManagerPumpById(int pumpId) async {
+    final response = await _apiService.get('/manager/pumps/$pumpId');
 
     if (response['success'] == true) {
       return response['data'] as Map<String, dynamic>?;
@@ -80,14 +88,14 @@ class PumpService {
 
   /// Calls POST /api/pumps (manager only)
   /// Required: pump_number, fuel_type, price_per_liter, station_id
-  static Future<Map<String, dynamic>?> createPump({
+  Future<Map<String, dynamic>?> createPump({
     required String pumpNumber,
     required String fuelType,
     required double pricePerLiter,
     required int stationId,
     double tankCapacity = 10000,
   }) async {
-    final response = await ApiService.post('/pumps', {
+    final response = await _apiService.post('/pumps', {
       'pump_number': pumpNumber,
       'fuel_type': fuelType.toLowerCase(),
       'price_per_liter': pricePerLiter,
@@ -109,13 +117,13 @@ class PumpService {
 
   /// Calls POST /api/manager/pumps (manager only)
   /// Uses the manager's station automatically
-  static Future<Map<String, dynamic>?> createManagerPump({
+  Future<Map<String, dynamic>?> createManagerPump({
     required String pumpNumber,
     required String fuelType,
     required double pricePerLiter,
     double tankCapacity = 10000,
   }) async {
-    final response = await ApiService.post('/manager/pumps', {
+    final response = await _apiService.post('/manager/pumps', {
       'pump_number': pumpNumber,
       'fuel_type': fuelType.toLowerCase(),
       'price_per_liter': pricePerLiter,
@@ -136,8 +144,8 @@ class PumpService {
 
   /// Calls PUT /api/pumps/:id/status (manager & supervisor)
   /// Valid: active, maintenance, inactive, occupied, emergency
-  static Future<bool> updatePumpStatus(int pumpId, String status) async {
-    final response = await ApiService.put(
+  Future<bool> updatePumpStatus(int pumpId, String status) async {
+    final response = await _apiService.put(
       '/pumps/$pumpId/status',
       {'status': status.toLowerCase()},
     );
@@ -154,8 +162,8 @@ class PumpService {
 
   /// Calls PUT /api/manager/pumps/:id/status
   /// Manager-only version with better validation
-  static Future<bool> updateManagerPumpStatus(int pumpId, String status) async {
-    final response = await ApiService.put(
+  Future<bool> updateManagerPumpStatus(int pumpId, String status) async {
+    final response = await _apiService.put(
       '/manager/pumps/$pumpId/status',
       {'status': status.toLowerCase()},
     );
@@ -171,8 +179,8 @@ class PumpService {
   // ─────────────────────────────────────────────
 
   /// Calls PUT /api/pumps/:id/price (manager only)
-  static Future<bool> updateFuelPrice(int pumpId, double pricePerLiter) async {
-    final response = await ApiService.put(
+  Future<bool> updateFuelPrice(int pumpId, double pricePerLiter) async {
+    final response = await _apiService.put(
       '/pumps/$pumpId/price',
       {'price_per_liter': pricePerLiter},
     );
@@ -189,8 +197,8 @@ class PumpService {
 
   /// Calls PUT /api/manager/pumps/:id/price
   /// Manager-only version
-  static Future<bool> updateManagerFuelPrice(int pumpId, double pricePerLiter) async {
-    final response = await ApiService.put(
+  Future<bool> updateManagerFuelPrice(int pumpId, double pricePerLiter) async {
+    final response = await _apiService.put(
       '/manager/pumps/$pumpId/price',
       {'price_per_liter': pricePerLiter},
     );
@@ -207,8 +215,8 @@ class PumpService {
 
   /// Calls DELETE /api/manager/pumps/:id
   /// Soft deletes the pump (sets is_active = false)
-  static Future<bool> deleteManagerPump(int pumpId) async {
-    final response = await ApiService.delete('/manager/pumps/$pumpId');
+  Future<bool> deleteManagerPump(int pumpId) async {
+    final response = await _apiService.delete('/manager/pumps/$pumpId');
 
     if (response['success'] == true) return true;
 
@@ -221,11 +229,11 @@ class PumpService {
   // ─────────────────────────────────────────────
 
   /// Calls GET /api/manager/pumps/:id/performance?period=today|week|month
-  static Future<Map<String, dynamic>?> getPumpPerformance(
+  Future<Map<String, dynamic>?> getPumpPerformance(
     int pumpId, {
     String period = 'today',
   }) async {
-    final response = await ApiService.get(
+    final response = await _apiService.get(
       '/manager/pumps/$pumpId/performance?period=$period',
     );
 
@@ -235,5 +243,13 @@ class PumpService {
 
     debugPrint('getPumpPerformance error: ${response['message']}');
     return null;
+  }
+
+  // ─────────────────────────────────────────────
+  // DISPOSE
+  // ─────────────────────────────────────────────
+
+  void dispose() {
+    // Clean up resources if needed
   }
 }
